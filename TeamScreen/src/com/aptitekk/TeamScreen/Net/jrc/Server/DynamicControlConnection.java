@@ -1,0 +1,140 @@
+package com.aptitekk.TeamScreen.Net.jrc.Server;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
+import org.one.stone.soup.remote.control.server.ControlAdapter;
+import org.one.stone.soup.xml.XmlElement;
+import org.one.stone.soup.xml.XmlParser;
+import org.one.stone.soup.xml.stream.XmlLoader;
+
+/**
+ * Continuity with the rest of the Dynamic Screen Recording system<br>
+ * Modified from the original <i>ControlConnection</i>
+ * 
+ * @author kevint, Nicholas Cross
+ *
+ */
+
+public class DynamicControlConnection implements Runnable{
+	
+	private OutputStream oStream;
+	private InputStream iStream;
+	private Thread thread;
+	private boolean running = false;
+	private boolean fullControl = false;
+	private DynamicRemoteControlServer server;
+	private ControlAdapter adapter;
+
+	public DynamicControlConnection(DynamicRemoteControlServer server,
+			OutputStream oStream,InputStream iStream,boolean fullControl,ControlAdapter adapter)
+	{
+		this.adapter = adapter;
+		this.fullControl = fullControl;
+		this.server = server;
+		this.iStream = iStream;
+		this.oStream = oStream;
+	}
+	
+	public void process()
+	{
+		thread = new Thread(this,"Control Thread");
+		thread.start();
+	}
+	
+	public void run()
+	{
+		try{
+			XmlParser parser = XmlLoader.getStandardParser();
+			XmlElement packet = null;
+			
+			running = true;
+			
+			while(running)
+			{
+				packet = parser.parseElement(iStream);
+				
+				if(packet==null)
+				{
+					break;
+				}
+				//System.out.println("Request:"+packet.toXml());
+				
+				if(packet.getName().equals("nextFrame"))
+				{
+					server.setReadyForFrame();
+				}
+				else if(packet.getName().equals("sendKeyFrame"))
+				{
+					server.sendKeyFrame();
+				}
+				else if(fullControl) 
+				{
+					if(packet.getName().equals("keyPressed"))
+					{
+						adapter.keyPress( Integer.parseInt(packet.getAttributeValueByName("code")) );
+					}
+					else if(packet.getName().equals("keyReleased"))
+					{
+						adapter.keyRelease( Integer.parseInt(packet.getAttributeValueByName("code")) );
+					}
+					else if(packet.getName().equals("mouseMoved"))
+					{
+						adapter.mouseMove( Integer.parseInt(packet.getAttributeValueByName("x")),Integer.parseInt(packet.getAttributeValueByName("y")));
+					}
+					else if(packet.getName().equals("mousePressed"))
+					{
+						adapter.mousePress( Integer.parseInt(packet.getAttributeValueByName("code")) );
+					}
+					else if(packet.getName().equals("mouseReleased"))
+					{
+						adapter.mouseRelease( Integer.parseInt(packet.getAttributeValueByName("code")) );
+					}
+				}
+			}
+			
+			running = false;
+		}
+		catch(Exception e)
+		{
+			e.printStackTrace();
+		}
+
+		try{ iStream.close(); }catch(Exception e){}
+		server.disconnect();
+	}
+	
+	public void sendFrameMarker(boolean fullFrame) throws IOException
+	{
+		if(running==false)
+		{
+			return;
+		}
+		if(fullFrame)
+		{
+			oStream.write( "<fullFrame/>".getBytes() );
+		}
+		else
+		{
+			oStream.write( "<frame/>".getBytes() );
+		}
+		oStream.flush();
+	}
+	
+	public void stop()
+	{
+		try{
+			running = false;
+			iStream.close();
+		}
+		catch(Exception e){}
+		
+		/*try{
+			thread.stop();
+		}
+		catch(Exception e)
+		{}*/
+	}
+
+}
