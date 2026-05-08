@@ -1,0 +1,30 @@
+From f655d19281040c56c54d2c7499f981b9db88343f Mon Sep 17 00:00:00 2001
+From: Mitch Talmadge <mitcht@aptitekk.com>
+Date: Wed, 30 Jul 2014 03:19:37 -0600
+Subject: [PATCH 073/101] SettingsFrame position is now set *after* packing.
+ Normally it was set before, which caused issues because after packing the
+ position shifted.
+
+---
+ .../src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java      | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
+index 5d9b34f..79249a4 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
+@@ -48,9 +48,10 @@ public class SettingsFrame extends JFrame implements ActionListener {
+ 		this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+ 		this.setResizable(false);
+ 		this.setIconImage(FolderManager.createImage("/images/TeamScreen-64px.png", "tray icon"));
+-		this.setLocationRelativeTo(null);
+ 		
+ 		initGui();
++		
++		this.setLocationRelativeTo(null);
+ 	}
+ 	
+ 	private void initGui() {
+-- 
+2.39.5 (Apple Git-154)
+

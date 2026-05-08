@@ -1,0 +1,34 @@
+From ce6a153f0a56a8f635829213187ea123452b6e02 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Tue, 22 Jul 2014 10:42:20 -0600
+Subject: [PATCH 055/101] Made more methods non-static
+
+---
+ TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index e1ba45a..b3b88c6 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -60,7 +60,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 	
+ 	static MainFrame frame;
+ 	static JFrame sframe;
+-	static TeamScreenDaemon TSDaemon = null;
++	TeamScreenDaemon TSDaemon = null;
+ 	static boolean enabled = true;
+ 	static WindowSelect wSelect;
+ 	static PushSelect pSelect;
+@@ -273,7 +273,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+         });
+     }
+ 	
+-	protected static void openMainWindow() {
++	protected void openMainWindow() {
+     	SwingUtilities.invokeLater(new Runnable() {
+             public void run() {
+             	frame = new MainFrame(TSDaemon);
+-- 
+2.39.5 (Apple Git-154)
+

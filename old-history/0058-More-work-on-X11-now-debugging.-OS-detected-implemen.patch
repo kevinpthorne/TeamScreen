@@ -1,0 +1,257 @@
+From 6c91fd943f2d11edc30d4606bc7c25d7b9517ace Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 23 Jul 2014 11:46:54 -0600
+Subject: [PATCH 058/101] More work on X11, now debugging. OS detected
+ implemented. More work on sidebar
+
+---
+ .../Frames/JRCServerControlExtension.java     | 28 ++++++++-
+ .../aptitekk/TeamScreen/JNA/X11Native.java    | 58 ++++++-------------
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java | 28 ++++++++-
+ .../Util/NotImplementedException.java         |  9 +++
+ 4 files changed, 80 insertions(+), 43 deletions(-)
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Util/NotImplementedException.java
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/JRCServerControlExtension.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/JRCServerControlExtension.java
+index ca9e9fb..57460e7 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/JRCServerControlExtension.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/JRCServerControlExtension.java
+@@ -1,8 +1,18 @@
+ package com.aptitekk.TeamScreen.Frames;
+ 
++import java.awt.Color;
+ import java.awt.Dimension;
++import java.awt.Point;
++import java.awt.event.MouseEvent;
++import java.awt.event.MouseListener;
++import java.awt.event.MouseMotionListener;
++import java.awt.event.WindowEvent;
++import java.awt.event.WindowFocusListener;
+ 
++import javax.swing.BorderFactory;
+ import javax.swing.JFrame;
++import javax.swing.JPanel;
++import javax.swing.border.EmptyBorder;
+ 
+ import com.aptitekk.TeamScreen.Net.jrc.DynamicJRCServerApplication;
+ 
+@@ -18,7 +28,23 @@ public class JRCServerControlExtension extends JFrame{
+ 		setResizable(false);
+ 		setLocationRelativeTo(null);
+ 		
+-		this.setAlwaysOnTop(true);
++        this.setUndecorated(true);
++        this.setVisible(true);
++        this.setBounds(0, 0, 480, 70);
++        this.setAlwaysOnTop(true);
++	    
++		initGui();
++		
++		this.getContentPane().setBackground(Color.WHITE);
++		((JPanel) this.getContentPane()).setBorder(BorderFactory.createCompoundBorder(
++				BorderFactory.createMatteBorder(5, 5, 5, 5, new Color(0, 120, 255)),
++				new EmptyBorder(10, 10, 10, 10)));
++		
++		this.pack();
++	}
++	
++	private void initGui() {
++		
+ 	}
+ 
+ }
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
+index dc18ddf..cd008fc 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
+@@ -27,10 +27,10 @@ public class X11Native extends WindowManager {
+ 	public List<WindowInfo> getWindows() {
+ 		final List<WindowInfo> inflList = new ArrayList<WindowInfo>();
+ 
+-		WindowByReference parent;
+-		X11.WindowByReference root;
+-	    PointerByReference children;
+-	    IntByReference nNumChildren;
++		WindowByReference parent= null;
++		X11.WindowByReference root= null;
++	    PointerByReference children= null;
++	    IntByReference nNumChildren = null;
+ 	    
+ 
+ 	    int status = X11Ext.instance.XQueryTree(X11Ext.x11Display, 
+@@ -44,15 +44,18 @@ public class X11Native extends WindowManager {
+ 
+ 	    if (nNumChildren.getValue() == 0)
+ 	    {
++	    	//good to know that this is also the top window
+ 	        return inflList;
+ 	    }
+ 
+ 	    for (int i = 0; i < nNumChildren.getValue(); i++)
+ 	    {
+-	    	inflList.add(getWindow(X11Ext.x11Display, children.getPointer().getIntArray(0, nNumChildren.getValue())[i]));
++	    	inflList.add(getWindow(X11Ext.x11Display, new X11.Window(children.getPointer().getIntArray(0, nNumChildren.getValue())[i])));
+ 	    }
+ 
+ 	    X11Ext.instance.XFree(children.getPointer());
++	    
++	    return inflList;
+ 		
+ 		/*int top = X11.INSTANCE.GetTopWindow(0);
+ 		while (top!=0) {
+@@ -94,7 +97,7 @@ public class X11Native extends WindowManager {
+ 	    int status = X11Ext.instance.XGetWMName(display, 
+ 	    		window, 
+ 	    		wmName);
+-	    if(status != 0 && wmName.value != null && wmName.nitems != null) {
++	    if(status == X11.Success && wmName.value != null && wmName.nitems != null) {
+ 	    	status = X11Ext.instance.XGetWindowAttributes(display, window, wmInfo);
+ 	    	if(status != 0) {
+ 	    		WindowInfo.RECT rect = new WindowInfo.RECT();
+@@ -113,27 +116,7 @@ public class X11Native extends WindowManager {
+ 	
+ 	@Override
+ 	public WindowInfo getTopWindow() {
+-		final List<WindowInfo> topWindowList = new ArrayList<WindowInfo>();
+-		int top = X11.INSTANCE.GetTopWindow(0);
+-		X11.INSTANCE.EnumWindows(new WndEnumProc()
+-		{
+-			@Override
+-			public boolean callback(int hWnd, int lParam)
+-			{
+-				if (X11.INSTANCE.IsWindowVisible(hWnd)) {
+-					RECT r = new RECT();
+-					X11.INSTANCE.GetWindowRect(hWnd, r);
+-					if (r.left>-32000) {     // minimized
+-						byte[] buffer = new byte[1024];
+-						X11.INSTANCE.GetWindowTextA(hWnd, buffer, buffer.length);
+-						String title = Native.toString(buffer);
+-						topWindowList.add(new WindowInfo(hWnd, r, title));
+-					}
+-				}
+-				return true;
+-			}
+-		}, 0);
+-		return topWindowList.get(0);
++		return getWindows().get(getWindows().size()-1);
+ 	}
+ 	
+ 	public WindowInfo getWindowbyTitle(String windowTitle) throws WindowNotFoundException {
+@@ -149,10 +132,15 @@ public class X11Native extends WindowManager {
+ 	private int[] getRect(int hwnd) throws WindowNotFoundException,
+ 	GetWindowRectException {
+ 		RECT r = new RECT();
+-		int result = X11.INSTANCE.GetWindowRect(hwnd, r);
++		X11.XWindowAttributes windowAttrib = null;
++		int result = X11Ext.instance.XGetWindowAttributes(X11Ext.x11Display, new X11.Window(hwnd), windowAttrib);
+ 		if(result == 0) {
+ 			throw new GetWindowRectException("" + hwnd);
+ 		}
++		r.top = windowAttrib.y;
++		r.bottom = windowAttrib.y+windowAttrib.height;
++		r.left = windowAttrib.x;
++		r.right= windowAttrib.x+windowAttrib.width;
+ 		return r.asArray();
+ 	}
+ 
+@@ -173,7 +161,7 @@ public class X11Native extends WindowManager {
+ 	public synchronized WindowInfo updateWindow(WindowInfo w) throws WindowNotFoundException {
+ 		List<WindowInfo> windows = getWindows();
+ 		for(WindowInfo window : windows) {
+-			if(window.hwnd == w.hwnd) {
++			if(window.window.intValue() == w.window.intValue()) {
+ 				return window;
+ 			}
+ 		}
+@@ -185,18 +173,6 @@ public class X11Native extends WindowManager {
+ 	{
+ 		final X11 instance = (X11) Native.loadLibrary ("x11", X11Ext.class);
+ 		Display x11Display = instance.XOpenDisplay(null);
+-		
+-		boolean IsWindowVisible(int hWnd);
+-		int GetWindowRect(int hWnd, RECT r);
+-		void GetWindowTextA(int hWnd, byte[] buffer, int buflen);
+-		int GetTopWindow(int hWnd);
+-		int GetWindow(int hWnd, int flag);
+-		
+-		XWindowAttributes FindWindow(String lpClassName, String lpWindowName);
+-	    int GetWindowRect(XWindowAttributes handle, int[] rect);
+-	    
+-	    
+-		final int GW_HWNDNEXT = 2;
+ 	}
+ 
+ 
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index cb4f12e..5479dd0 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -32,8 +32,10 @@ import com.aptitekk.TeamScreen.Frames.PushSelect;
+ import com.aptitekk.TeamScreen.Frames.WindowSelect;
+ import com.aptitekk.TeamScreen.JNA.WindowManager;
+ import com.aptitekk.TeamScreen.JNA.WindowsNative;
++import com.aptitekk.TeamScreen.JNA.X11Native;
+ import com.aptitekk.TeamScreen.Net.NetHandler;
+ import com.aptitekk.TeamScreen.Util.LogFormat;
++import com.aptitekk.TeamScreen.Util.NotImplementedException;
+ import com.aptitekk.TeamScreen.Util.WindowInfo;
+ import com.melloware.jintellitype.HotkeyListener;
+ import com.melloware.jintellitype.JIntellitype;
+@@ -116,7 +118,15 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 			JIntellitype.getInstance().registerHotKey(1, JIntellitype.MOD_CONTROL + JIntellitype.MOD_SHIFT, (int)'1');
+ 			JIntellitype.getInstance().addHotKeyListener(this);
+ 			
+-			wManager = new WindowsNative();
++			if(FolderManager.isWindows()) {
++				wManager = new WindowsNative(); logger.info("Windows Detected");
++			} else if(FolderManager.isMac()) {
++				 logger.info("Mac OS X detected"); throw new NotImplementedException("Mac is not supported yet.");
++			} else if(FolderManager.isUnix()) {
++				wManager = new X11Native(); logger.info("X11/Unix detected");
++			} else {
++				logger.info("No supported OS detected"); throw new UnsupportedOperationException("You aren't running Unix, Mac, or Windows.");
++			}
+ 			
+ 	        createTray();
+ 			addTray();
+@@ -139,6 +149,22 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 				    "Redundant Process",
+ 				    JOptionPane.ERROR_MESSAGE);
+ 			System.exit(0);
++		} catch (NotImplementedException e) {
++			JOptionPane.showMessageDialog(null,
++				    e.getMessage(),
++				    "NotImplementedException",
++				    JOptionPane.ERROR_MESSAGE);
++			e.printStackTrace();
++			JIntellitype.getInstance().cleanUp();
++			System.exit(0);
++		} catch (UnsupportedOperationException e) {
++			JOptionPane.showMessageDialog(null,
++				    e.getMessage(),
++				    "UnsupportedOperationException",
++				    JOptionPane.ERROR_MESSAGE);
++			e.printStackTrace();
++			JIntellitype.getInstance().cleanUp();
++			System.exit(0);
+ 		}
+ 		
+ 		//Thread.currentThread().setDaemon(true);
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Util/NotImplementedException.java b/TeamScreen/src/com/aptitekk/TeamScreen/Util/NotImplementedException.java
+new file mode 100644
+index 0000000..deb1bbb
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Util/NotImplementedException.java
+@@ -0,0 +1,9 @@
++package com.aptitekk.TeamScreen.Util;
++
++public class NotImplementedException extends Exception{
++	
++	public NotImplementedException(String message) {
++		super(message);
++	}
++
++}
+-- 
+2.39.5 (Apple Git-154)
+

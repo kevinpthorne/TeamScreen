@@ -1,0 +1,25 @@
+From f2414471eef419e5403d24a3f023c4a2a8b03c51 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 6 Apr 2014 21:47:42 -0600
+Subject: [PATCH 017/101] Oops
+
+---
+ TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+index 5cb5bb8..d2c1e06 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+@@ -32,7 +32,7 @@ public class PacketProcessor {
+ 		//[0] is type of packet (request, close, etc), [1] is value
+ 		
+ 		
+-		if(packetSplit.length <= 2)
++		if(packetSplit.length >= 2)
+ 			if(packetSplit[0].equalsIgnoreCase("request")) {
+ 				if(packetSplit[1].equalsIgnoreCase("accept")) {
+ 					//start jrc server
+-- 
+2.39.5 (Apple Git-154)
+

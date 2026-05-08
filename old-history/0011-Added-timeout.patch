@@ -1,0 +1,38 @@
+From c9d3603fdf85659d4aaa5559bfba80628630e6c0 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 6 Apr 2014 21:39:30 -0600
+Subject: [PATCH 011/101] Added timeout
+
+---
+ .../com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java   | 2 +-
+ TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java | 1 +
+ 2 files changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
+index 1b232f3..d377c0e 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
+@@ -49,7 +49,7 @@ public class PacketListener extends Thread{
+ 				BufferedReader inFromClient = new BufferedReader(new InputStreamReader(connectionSocket.getInputStream()));
+ 				DataOutputStream outToClient = new DataOutputStream(connectionSocket.getOutputStream());
+ 
+-				connectionSocket.setSoTimeout(0);
++				connectionSocket.setSoTimeout(2000);
+ 				TeamScreenDaemon.logger.info("Reading from client...");
+ 				String clientPacket = inFromClient.readLine();
+ 				if(clientPacket == null)
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+index f812b2b..9c5e1e6 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+@@ -31,6 +31,7 @@ public class PacketProcessor {
+ 		String[] packetSplit = packetReceived.split(NetHandler.PACKET_SEPARATOR_CONSTANT);
+ 		//[0] is type of packet (request, close, etc), [1] is value
+ 		
++		
+ 		if(packetSplit.length == 2)
+ 			if(packetSplit[0].equalsIgnoreCase("request")) {
+ 				if(packetSplit[1].equalsIgnoreCase("accept")) {
+-- 
+2.39.5 (Apple Git-154)
+

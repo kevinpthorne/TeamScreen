@@ -1,0 +1,94 @@
+From 7025deaf93fae283a492fedd0e8950d6c26799e0 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Tue, 29 Jul 2014 17:57:20 -0600
+Subject: [PATCH 067/101] Made the MainFrame scalable
+
+---
+ .../aptitekk/TeamScreen/Frames/MainFrame.java    | 16 +++++++++++++---
+ 1 file changed, 13 insertions(+), 3 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java
+index 33c4c29..55f78b9 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java
+@@ -39,6 +39,8 @@ import com.aptitekk.TeamScreen.Window.Util.ImageButton;
+  */
+ public class MainFrame extends JFrame implements ActionListener, MouseListener{
+ 	
++	final int iconSize = 32;
++	
+ 	TeamScreenDaemon master;
+ 	static Point mouseDownCompCoords;
+ 	
+@@ -59,8 +61,8 @@ public class MainFrame extends JFrame implements ActionListener, MouseListener{
+ 		
+ 		System.setProperty("com.apple.mrj.application.apple.menu.about.name", "TeamScreen");
+ 		this.setTitle("TeamScreen");
+-		this.setMaximumSize(new Dimension(480, 70));
+-		this.setMinimumSize(new Dimension(480, 70));
++		this.setMaximumSize(new Dimension((int) (iconSize*7.5), iconSize+6));
++		this.setMinimumSize(new Dimension((int) (iconSize*7.5), iconSize+6));
+ 		setResizable(false);
+ 		setLocationRelativeTo(null);
+ 
+@@ -132,14 +134,16 @@ public class MainFrame extends JFrame implements ActionListener, MouseListener{
+ 		mainPane.setComponentOrientation(ComponentOrientation.LEFT_TO_RIGHT);
+ 		
+ 		Image logo = FolderManager.createImage("/images/TeamScreen-64px.png", "logo icon");
+-		logo = logo.getScaledInstance(48, 48, 5);
++		logo = logo.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH);
+ 		JLabel logoPane = new JLabel(new ImageIcon(logo));
+ 		mainPane.add(logoPane);
+ 		
+ 		Image join = FolderManager.createImage("/images/join-enabled.png", "join icon");
++		join = join.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH);
+ 		joinPane = new ImageButton(new ImageIcon(join), "Join");
+ 		mainPane.add(joinPane.getIconPane());
+ 		Image leave = FolderManager.createImage("/images/leave-disabled.png", "leave icon");
++		leave = leave.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH);
+ 		leavePane = new ImageButton(new ImageIcon(leave), false, "Leave");
+ 		mainPane.add(leavePane.getIconPane());
+ 		
+@@ -147,10 +151,12 @@ public class MainFrame extends JFrame implements ActionListener, MouseListener{
+ 		mainPane.add(Box.createHorizontalStrut(125));
+ 		
+ 		Image share = FolderManager.createImage("/images/share-enabled.png", "share icon");
++		share = share.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH);
+ 		sharePane = new ImageButton(new ImageIcon(share), "Share");
+ 		mainPane.add(sharePane.getIconPane());
+ 		
+ 		Image setting=FolderManager.createImage("/images/settings.png", "settings icon");
++		setting = setting.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH);
+ 		settingsPane = new ImageButton(new ImageIcon(setting), "Settings");
+ 		mainPane.add(settingsPane.getIconPane());
+ 		
+@@ -159,10 +165,12 @@ public class MainFrame extends JFrame implements ActionListener, MouseListener{
+ 			pin = FolderManager.createImage("/images/pinned.png", "pinned icon");
+ 		else
+ 			pin = FolderManager.createImage("/images/pin.png", "pin icon");
++		pin = pin.getScaledInstance((iconSize/2), (iconSize/2), Image.SCALE_SMOOTH);
+ 		pinPane = new ImageButton(new ImageIcon(pin), "Pin");
+ 		mainPane.add(pinPane.getIconPane());
+ 		
+ 		Image exit = FolderManager.createImage("/images/exit.png", "exit icon");
++		exit = exit.getScaledInstance((iconSize/2), (iconSize/2), Image.SCALE_SMOOTH);
+ 		exitPane = new ImageButton(new ImageIcon(exit), "Exit");
+ 		mainPane.add(exitPane.getIconPane());
+ 		
+@@ -214,11 +222,13 @@ public class MainFrame extends JFrame implements ActionListener, MouseListener{
+ 			if(pinned) {
+ 				pinned = false;
+ 				Image pin = FolderManager.createImage("/images/pin.png", "pin icon");
++				pin = pin.getScaledInstance((iconSize/2), (iconSize/2), Image.SCALE_SMOOTH);
+ 				pinPane.getIconPane().setIcon(new ImageIcon(pin));
+ 				this.repaint();
+ 			} else {
+ 				pinned = true;
+ 				Image pin = FolderManager.createImage("/images/pinned.png", "pinned icon");
++				pin = pin.getScaledInstance((iconSize/2), (iconSize/2), Image.SCALE_SMOOTH);
+ 				pinPane.getIconPane().setIcon(new ImageIcon(pin));
+ 				this.repaint();
+ 			}
+-- 
+2.39.5 (Apple Git-154)
+

@@ -1,0 +1,309 @@
+From a273ebb0bf9801fc50181075640a9fd1c4421faa Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Mon, 5 May 2014 22:08:47 -0600
+Subject: [PATCH 046/101] Refactored Window pkg to Frame, started on
+ cross-platform ability
+
+---
+ .../{Window => Frames}/MainFrame.java         |   2 +-
+ .../{Window => Frames}/PushSelect.java        |   2 +-
+ .../{Window => Frames}/SettingsFrame.java     |   2 +-
+ .../{Window => Frames}/WindowSelect.java      |   2 +-
+ .../TeamScreen/JNA/WindowManager.java         |  33 ++++
+ .../TeamScreen/JNA/WindowsNative.java         | 159 ++++++++++++++++++
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java |   7 +-
+ 7 files changed, 199 insertions(+), 8 deletions(-)
+ rename TeamScreen/src/com/aptitekk/TeamScreen/{Window => Frames}/MainFrame.java (95%)
+ rename TeamScreen/src/com/aptitekk/TeamScreen/{Window => Frames}/PushSelect.java (96%)
+ rename TeamScreen/src/com/aptitekk/TeamScreen/{Window => Frames}/SettingsFrame.java (74%)
+ rename TeamScreen/src/com/aptitekk/TeamScreen/{Window => Frames}/WindowSelect.java (94%)
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManager.java
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/MainFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java
+similarity index 95%
+rename from TeamScreen/src/com/aptitekk/TeamScreen/Window/MainFrame.java
+rename to TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java
+index 41f2dbd..ff7569f 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Window/MainFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java
+@@ -1,4 +1,4 @@
+-package com.aptitekk.TeamScreen.Window;
++package com.aptitekk.TeamScreen.Frames;
+ 
+ import java.awt.BorderLayout;
+ import java.awt.Dimension;
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/PushSelect.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java
+similarity index 96%
+rename from TeamScreen/src/com/aptitekk/TeamScreen/Window/PushSelect.java
+rename to TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java
+index 4c13b87..e1dcc47 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Window/PushSelect.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java
+@@ -1,4 +1,4 @@
+-package com.aptitekk.TeamScreen.Window;
++package com.aptitekk.TeamScreen.Frames;
+ 
+ import java.awt.BorderLayout;
+ import java.awt.Color;
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/SettingsFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
+similarity index 74%
+rename from TeamScreen/src/com/aptitekk/TeamScreen/Window/SettingsFrame.java
+rename to TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
+index 7fb834b..999afc5 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Window/SettingsFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
+@@ -1,4 +1,4 @@
+-package com.aptitekk.TeamScreen.Window;
++package com.aptitekk.TeamScreen.Frames;
+ 
+ /**
+  * TODO Put here a description of what this class does.
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/WindowSelect.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
+similarity index 94%
+rename from TeamScreen/src/com/aptitekk/TeamScreen/Window/WindowSelect.java
+rename to TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
+index 213fa49..43d507c 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Window/WindowSelect.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
+@@ -1,4 +1,4 @@
+-package com.aptitekk.TeamScreen.Window;
++package com.aptitekk.TeamScreen.Frames;
+ 
+ import java.awt.BorderLayout;
+ import java.awt.Color;
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManager.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManager.java
+new file mode 100644
+index 0000000..72af655
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManager.java
+@@ -0,0 +1,33 @@
++package com.aptitekk.TeamScreen.JNA;
++
++import java.util.List;
++
++import com.aptitekk.TeamScreen.Util.WindowInfo;
++
++public abstract class WindowManager {
++	
++	public abstract List<WindowInfo> getWindows();
++	public abstract WindowInfo getTopWindow();
++	
++	public abstract int[] getWindowRect(String windowName);
++	public abstract WindowInfo getWindowbyTitle(String windowTitle) throws WindowNotFoundException;
++	
++	public abstract WindowInfo updateWindow(WindowInfo w) throws WindowNotFoundException;
++
++	
++	@SuppressWarnings("serial")
++	public static class WindowNotFoundException extends Exception {
++		public WindowNotFoundException(String className, String windowName) {
++			super(String.format("Window null for className: %s; windowName: %s", 
++					className, windowName));
++		}
++	}
++
++	@SuppressWarnings("serial")
++	public static class GetWindowRectException extends Exception {
++		public GetWindowRectException(String windowName) {
++			super("Window Rect not found for " + windowName);
++		}
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java
+new file mode 100644
+index 0000000..bf57d5c
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java
+@@ -0,0 +1,159 @@
++package com.aptitekk.TeamScreen.JNA;
++
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.Comparator;
++import java.util.List;
++
++import com.aptitekk.TeamScreen.Util.WindowInfo;
++import com.aptitekk.TeamScreen.Util.WindowInfo.RECT;
++import com.sun.jna.Native;
++import com.sun.jna.platform.win32.WinDef.HWND;
++import com.sun.jna.win32.StdCallLibrary;
++import com.sun.jna.win32.W32APIOptions;
++
++public class WindowsNative extends WindowManager {
++
++	@Override
++	public List<WindowInfo> getWindows() {
++		final List<WindowInfo> inflList = new ArrayList<WindowInfo>();
++		final List<Integer> order = new ArrayList<Integer>();
++		int top = User32.instance.GetTopWindow(0);
++		while (top!=0) {
++			order.add(top);
++			top = User32.instance.GetWindow(top, User32.GW_HWNDNEXT);
++		}
++		User32.instance.EnumWindows(new WndEnumProc()
++		{
++			@Override
++			public boolean callback(int hWnd, int lParam)
++			{
++				if (User32.instance.IsWindowVisible(hWnd)) {
++					RECT r = new RECT();
++					User32.instance.GetWindowRect(hWnd, r);
++					if (r.left>-32000) {     // minimized
++						byte[] buffer = new byte[1024];
++						User32.instance.GetWindowTextA(hWnd, buffer, buffer.length);
++						String title = Native.toString(buffer);
++						inflList.add(new WindowInfo(hWnd, r, title));
++					}
++				}
++				return true;
++			}
++		}, 0);
++		Collections.sort(inflList, new Comparator<WindowInfo>()
++				{
++			@Override
++			public int compare(WindowInfo o1, WindowInfo o2) {
++				return order.indexOf(o1.hwnd)-order.indexOf(o2.hwnd);
++			}
++				});
++		return inflList;
++	}
++	
++	@Override
++	public WindowInfo getTopWindow() {
++		final List<WindowInfo> topWindowList = new ArrayList<WindowInfo>();
++		int top = User32.instance.GetTopWindow(0);
++		User32.instance.EnumWindows(new WndEnumProc()
++		{
++			@Override
++			public boolean callback(int hWnd, int lParam)
++			{
++				if (User32.instance.IsWindowVisible(hWnd)) {
++					RECT r = new RECT();
++					User32.instance.GetWindowRect(hWnd, r);
++					if (r.left>-32000) {     // minimized
++						byte[] buffer = new byte[1024];
++						User32.instance.GetWindowTextA(hWnd, buffer, buffer.length);
++						String title = Native.toString(buffer);
++						topWindowList.add(new WindowInfo(hWnd, r, title));
++					}
++				}
++				return true;
++			}
++		}, 0);
++		return topWindowList.get(0);
++	}
++	
++	public WindowInfo getWindowbyTitle(String windowTitle) throws WindowNotFoundException {
++		List<WindowInfo> windows = getWindows();
++		for(WindowInfo window : windows) {
++			if(window.getTitle().equals(windowTitle)) {
++				return window;
++			}
++		}
++		throw new WindowNotFoundException("", windowTitle);
++	}
++
++	private int[] getRect(String windowName) throws WindowNotFoundException,
++	GetWindowRectException {
++		int hwnd = -1;
++		List<WindowInfo> windows = getWindows();
++		for(WindowInfo window : windows) {
++			if(window.getTitle().equals(windowName)) {
++				hwnd = window.hwnd;
++			}
++		}
++		if(hwnd == -1) {
++			throw new WindowNotFoundException("", windowName);
++		}
++		RECT r = new RECT();
++		int result = User32.instance.GetWindowRect(hwnd, r);
++		if(result == 0) {
++			throw new GetWindowRectException(windowName);
++		}
++		return r.asArray();
++	}
++
++	public int[] getWindowRect(String windowName) {
++		int[] rect;
++		try {
++			rect = getRect(windowName);
++			return rect;
++		} catch (WindowNotFoundException e) {
++			e.printStackTrace();
++		} catch (GetWindowRectException e) {
++			e.printStackTrace();
++		}      
++		return null;
++	}
++	
++	@Override
++	public synchronized WindowInfo updateWindow(WindowInfo w) throws WindowNotFoundException {
++		List<WindowInfo> windows = getWindows();
++		for(WindowInfo window : windows) {
++			if(window.getTitle().equals(w.getTitle())) {
++				return window;
++			}
++		}
++		throw new WindowNotFoundException("", w.getTitle());
++	}
++	
++	static interface WndEnumProc extends StdCallLibrary.StdCallCallback {
++		boolean callback (int hWnd, int lParam);
++	}
++
++	static interface User32 extends StdCallLibrary
++	{
++		final User32 instance = (User32) Native.loadLibrary ("user32", User32.class);
++		User32 INSTANCE = (User32) Native.loadLibrary("user32", User32.class,
++	               W32APIOptions.DEFAULT_OPTIONS);
++		boolean EnumWindows (WndEnumProc wndenumproc, int lParam);
++		boolean IsWindowVisible(int hWnd);
++		int GetWindowRect(int hWnd, RECT r);
++		void GetWindowTextA(int hWnd, byte[] buffer, int buflen);
++		int GetTopWindow(int hWnd);
++		int GetWindow(int hWnd, int flag);
++		
++		HWND FindWindow(String lpClassName, String lpWindowName);
++	    int GetWindowRect(HWND handle, int[] rect);
++	    
++		final int GW_HWNDNEXT = 2;
++	}
++	
++	
++	
++	
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index ee2ec49..4111d0a 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -23,12 +23,12 @@ import javax.swing.JFrame;
+ import javax.swing.JOptionPane;
+ import javax.swing.SwingUtilities;
+ 
++import com.aptitekk.TeamScreen.Frames.MainFrame;
++import com.aptitekk.TeamScreen.Frames.PushSelect;
++import com.aptitekk.TeamScreen.Frames.WindowSelect;
+ import com.aptitekk.TeamScreen.Net.NetHandler;
+ import com.aptitekk.TeamScreen.Util.LogFormat;
+ import com.aptitekk.TeamScreen.Util.WindowInfo;
+-import com.aptitekk.TeamScreen.Window.MainFrame;
+-import com.aptitekk.TeamScreen.Window.PushSelect;
+-import com.aptitekk.TeamScreen.Window.WindowSelect;
+ import com.melloware.jintellitype.HotkeyListener;
+ import com.melloware.jintellitype.JIntellitype;
+ 
+@@ -205,7 +205,6 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+         };
+          
+         openItem.addActionListener(listener);
+-        aboutItem.addActionListener(listener);
+         pushItem.addActionListener(listener);
+          
+         exitItem.addActionListener(new ActionListener() {
+-- 
+2.39.5 (Apple Git-154)
+

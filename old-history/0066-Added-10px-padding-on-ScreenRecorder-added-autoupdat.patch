@@ -1,0 +1,147 @@
+From 56bee0a1321689c8d7c1b8632baced1e2cbbb461 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Tue, 29 Jul 2014 16:44:51 -0600
+Subject: [PATCH 066/101] Added 10px padding on ScreenRecorder, added
+ autoupdater structure: ready to implement
+
+---
+ .../Net/jrc/Server/WindowScreenRecorder.java  |  2 +-
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java | 41 ++++++++++++++-----
+ .../TeamScreen/Updater/AutoUpdater.java       | 13 ++++++
+ 3 files changed, 45 insertions(+), 11 deletions(-)
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Updater/AutoUpdater.java
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowScreenRecorder.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowScreenRecorder.java
+index 93f7313..d3ed12c 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowScreenRecorder.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowScreenRecorder.java
+@@ -28,7 +28,7 @@ public class WindowScreenRecorder extends DynamicScreenRecorder{
+ 	private Rectangle getWindowRect() {
+ 		Point topleft = new Point(this.window.getRect()[0], this.window.getRect()[1]);
+ 		Point bottomright = new Point(this.window.getRect()[2], this.window.getRect()[3]);
+-		return new Rectangle(topleft.x, topleft.y, bottomright.x - topleft.x, bottomright.y - topleft.y);
++		return new Rectangle(topleft.x, topleft.y, bottomright.x - topleft.x, bottomright.y - topleft.y+20);
+ 	}
+ 	
+ 	public void updateWindow(WindowInfo window) {
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index b05d377..ab5c1b5 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -37,6 +37,7 @@ import com.aptitekk.TeamScreen.JNA.WindowManager;
+ import com.aptitekk.TeamScreen.JNA.WindowsNative;
+ import com.aptitekk.TeamScreen.JNA.X11Native;
+ import com.aptitekk.TeamScreen.Net.NetHandler;
++import com.aptitekk.TeamScreen.Updater.AutoUpdater;
+ import com.aptitekk.TeamScreen.Util.LogFormat;
+ import com.aptitekk.TeamScreen.Util.NotImplementedException;
+ import com.aptitekk.TeamScreen.Util.WindowInfo;
+@@ -88,6 +89,10 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 				| IllegalAccessException | UnsupportedLookAndFeelException e) {
+ 			e.printStackTrace();
+ 		}
++		
++		new AutoUpdater().callForUpdate();
++		
++		
+ 		new TeamScreenDaemon();
+ 	}
+ 	
+@@ -140,11 +145,6 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 			//openMainWindow();
+ 			
+ 			logger.info("Started TeamScreen successfully!");
+-		} catch (IOException e) {
+-			// crash dialog perhaps?
+-			e.printStackTrace();
+-			JIntellitype.getInstance().cleanUp();
+-			System.exit(0);
+ 		} catch (JIntellitypeException e) {
+ 			if(FolderManager.isWindows())
+ 				JOptionPane.showMessageDialog(null,
+@@ -156,23 +156,35 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 					    "TeamScreen was confused on whether you were running Windows or not...",
+ 					    "Well, this is embarrassing",
+ 					    JOptionPane.ERROR_MESSAGE);
+-			System.exit(0);
++			System.exit(1);
+ 		} catch (NotImplementedException e) {
+ 			JOptionPane.showMessageDialog(null,
+ 				    e.getMessage(),
+ 				    "NotImplementedException",
+ 				    JOptionPane.ERROR_MESSAGE);
+ 			e.printStackTrace();
+-			JIntellitype.getInstance().cleanUp();
+-			System.exit(0);
++			if(FolderManager.isWindows())
++				JIntellitype.getInstance().cleanUp();
++			System.exit(1);
+ 		} catch (UnsupportedOperationException e) {
+ 			JOptionPane.showMessageDialog(null,
+ 				    e.getMessage(),
+ 				    "UnsupportedOperationException",
+ 				    JOptionPane.ERROR_MESSAGE);
+ 			e.printStackTrace();
+-			JIntellitype.getInstance().cleanUp();
+-			System.exit(0);
++			if(FolderManager.isWindows())
++				JIntellitype.getInstance().cleanUp();
++			System.exit(1);
++		} catch(Exception e) {
++			e.printStackTrace();
++			JOptionPane.showMessageDialog(null,
++				    "TeamScreen has managed to cause an error:\n"
++					+e.getMessage(),
++				    "Error",
++				    JOptionPane.ERROR_MESSAGE);
++			if(FolderManager.isWindows())
++				JIntellitype.getInstance().cleanUp();
++			System.exit(1);
+ 		}
+ 		
+ 		//Thread.currentThread().setDaemon(true);
+@@ -197,6 +209,8 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 			}
+ 			else {
+ 				System.err.println("No NotificationLevel found");
++				properties.getConfig().setProperty("NotificationLevel", "info");
++				properties.saveConfig();
+ 				tray.displayMessage(title, text, type);
+ 			}
+ 			
+@@ -222,6 +236,13 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 			frame.updateStatus();
+ 	}
+ 	public void exit() {
++		try {
++			properties.saveConfig();
++			logger.info("Configuration saved succesfully");
++		} catch (IOException e) {
++			e.printStackTrace();
++			logger.severe("Configuration could not be saved");
++		}
+ 		tray.remove(trayIcon);
+ 		if(FolderManager.isWindows())
+ 			JIntellitype.getInstance().cleanUp();
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Updater/AutoUpdater.java b/TeamScreen/src/com/aptitekk/TeamScreen/Updater/AutoUpdater.java
+new file mode 100644
+index 0000000..d3ae3f8
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Updater/AutoUpdater.java
+@@ -0,0 +1,13 @@
++package com.aptitekk.TeamScreen.Updater;
++
++public class AutoUpdater {
++	
++	public AutoUpdater() {
++		
++	}
++	
++	public boolean callForUpdate() {
++		return false; // no update
++	}
++
++}
+-- 
+2.39.5 (Apple Git-154)
+

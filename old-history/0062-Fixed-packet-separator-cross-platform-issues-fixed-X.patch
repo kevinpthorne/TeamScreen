@@ -1,0 +1,539 @@
+From 0dcf880369bd09d568e923ebc1175ab4b2a73814 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 27 Jul 2014 10:47:51 -0600
+Subject: [PATCH 062/101] Fixed packet separator cross-platform issues, fixed
+ X11Native to work.
+
+---
+ .../TeamScreen/Frames/PushSelect.java         |   2 +
+ .../TeamScreen/Frames/WindowSelect.java       |  28 +-
+ .../aptitekk/TeamScreen/JNA/X11Native.java    | 276 ++++++++++++++----
+ .../Net/Listeners/PacketListener.java         |   6 +-
+ .../aptitekk/TeamScreen/Net/NetHandler.java   |   3 +-
+ .../TeamScreen/Net/PacketProcessor.java       |   8 +-
+ .../aptitekk/TeamScreen/Util/WindowInfo.java  |   8 +-
+ 7 files changed, 256 insertions(+), 75 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java
+index 2627f8e..386fd31 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java
+@@ -125,6 +125,8 @@ public class PushSelect extends JFrame implements ActionListener, KeyListener {
+ 		center.add(btnexit, c);
+ 		center.setVisible(true);
+ 		
++		System.out.println("Window Info:" + this.window.toString());
++		
+ 		this.add(pane);
+ 	}
+ 
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
+index 223e031..cc9b357 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
+@@ -17,6 +17,7 @@ import java.util.List;
+ 
+ import javax.swing.JFrame;
+ import javax.swing.JLabel;
++import javax.swing.JOptionPane;
+ import javax.swing.JPanel;
+ 
+ import com.aptitekk.TeamScreen.TeamScreenDaemon;
+@@ -33,12 +34,20 @@ public class WindowSelect extends JFrame implements MouseListener, KeyListener{
+ 
+ 	TeamScreenDaemon master;
+ 	
+-	boolean translucencySupported = true;
++	boolean translucencySupported = false;
+ 	
+ 	public WindowSelect(TeamScreenDaemon master) {
+ 		
+ 		this.master = master;
+ 		
++		if(TeamScreenDaemon.getWindowManager().getWindows().isEmpty()) {
++			JOptionPane.showMessageDialog(null,
++				    "No windows were found",
++				    "No Windows Found",
++				    JOptionPane.ERROR_MESSAGE);
++			return;
++		}
++		
+ 		this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Already there
+ 	    this.setExtendedState(JFrame.MAXIMIZED_BOTH);
+ 	    this.setUndecorated(true);
+@@ -46,9 +55,8 @@ public class WindowSelect extends JFrame implements MouseListener, KeyListener{
+ 	    try {
+ 	    	this.setOpacity(0.55f);
+ 	    } catch (UnsupportedOperationException e) {
+-	    	if(e.getMessage().contains("translucency")) {
++	    	if(e.getMessage().contains("translucency"))
+ 	    		translucencySupported = false;
+-	    	}
+ 	    	else
+ 	    		e.printStackTrace();
+ 	    }
+@@ -72,8 +80,18 @@ public class WindowSelect extends JFrame implements MouseListener, KeyListener{
+ 		
+ 		if(!translucencySupported) {
+ 			for(WindowInfo w : TeamScreenDaemon.getWindowManager().getWindows()) {
+-				if(!w.getTitle().equals("")) {
+-					squaresPanel.addSquare(w.getRect()[0], w.getRect()[1], w.getRect()[2], w.getRect()[3]);
++				try {
++					if(w == null)
++						throw new NullPointerException("WindowInfo list returned entry is null");
++					if(!w.getTitle().equals(""))
++						squaresPanel.addSquare(w.getRect()[0], w.getRect()[1], w.getRect()[2], w.getRect()[3]);
++				} catch (NullPointerException e) {
++					e.printStackTrace();
++					JOptionPane.showMessageDialog(null,
++						    e.getMessage() + "\n Length: "+TeamScreenDaemon.getWindowManager().getWindows().size(),
++						    "NullPointerException",
++						    JOptionPane.ERROR_MESSAGE);
++					break;
+ 				}
+ 			}
+ 		}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
+index 672a044..888ec2a 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
+@@ -1,5 +1,6 @@
+ package com.aptitekk.TeamScreen.JNA;
+ 
++import java.io.UnsupportedEncodingException;
+ import java.util.ArrayList;
+ import java.util.Collections;
+ import java.util.Comparator;
+@@ -11,6 +12,7 @@ import com.aptitekk.TeamScreen.Util.WindowInfo;
+ import com.aptitekk.TeamScreen.Util.WindowInfo.RECT;
+ import com.sun.jna.Library;
+ import com.sun.jna.Native;
++import com.sun.jna.NativeLong;
+ import com.sun.jna.Pointer;
+ import com.sun.jna.platform.unix.X11;
+ import com.sun.jna.platform.unix.X11.Display;
+@@ -19,6 +21,7 @@ import com.sun.jna.platform.unix.X11.WindowByReference;
+ import com.sun.jna.platform.unix.X11.XTextProperty;
+ import com.sun.jna.platform.unix.X11.XWindowAttributes;
+ import com.sun.jna.ptr.IntByReference;
++import com.sun.jna.ptr.NativeLongByReference;
+ import com.sun.jna.ptr.PointerByReference;
+ 
+ public class X11Native extends WindowManager {
+@@ -27,7 +30,7 @@ public class X11Native extends WindowManager {
+ 	public List<WindowInfo> getWindows() {
+ 		final List<WindowInfo> inflList = new ArrayList<WindowInfo>();
+ 
+-		WindowByReference parent= new WindowByReference();
++		/*WindowByReference parent= new WindowByReference();
+ 		WindowByReference root  = new WindowByReference();
+ 	    PointerByReference children = new PointerByReference();
+ 	    IntByReference nNumChildren = new IntByReference();
+@@ -50,70 +53,229 @@ public class X11Native extends WindowManager {
+ 
+ 	    for (int i = 0; i < nNumChildren.getValue(); i++)
+ 	    {
+-	    	inflList.add(getWindow(X11Ext.x11Display, new X11.Window(children.getPointer().getIntArray(0, nNumChildren.getValue())[i])));
++	    	WindowInfo windowToAdd = getWindow(X11Ext.x11Display, children.getValue().getIntArray(0, nNumChildren.getValue())[i]);
++	    	if(windowToAdd != null)
++	    		inflList.add(windowToAdd);
+ 	    }
+ 
+ 	    X11Ext.instance.XFree(children.getPointer());
+ 	    
+-	    return inflList;
+-		
+-		/*int top = X11.INSTANCE.GetTopWindow(0);
+-		while (top!=0) {
+-			order.add(top);
+-			top = X11.INSTANCE.GetWindow(top, X11.GW_HWNDNEXT);
+-		}
+-		X11.INSTANCE.EnumWindows(new WndEnumProc()
+-		{
+-			@Override
+-			public boolean callback(int hWnd, int lParam)
+-			{
+-				if (X11.INSTANCE.IsWindowVisible(hWnd)) {
+-					RECT r = new RECT();
+-					X11.INSTANCE.GetWindowRect(hWnd, r);
+-					if (r.left>-32000) {     // minimized
+-						byte[] buffer = new byte[1024];
+-						X11.INSTANCE.GetWindowTextA(hWnd, buffer, buffer.length);
+-						String title = Native.toString(buffer);
+-						inflList.add(new WindowInfo(hWnd, r, title));
+-					}
+-				}
+-				return true;
+-			}
+-		}, 0);
+-		Collections.sort(inflList, new Comparator<WindowInfo>()
+-				{
+-			@Override
+-			public int compare(WindowInfo o1, WindowInfo o2) {
+-				return order.indexOf(o1.hwnd)-order.indexOf(o2.hwnd);
+-			}
+-				});
+-		return inflList;*/
++	    return inflList;*/
++		byte[] bytes = null;
++        Window rootWindow = X11Ext.instance.XDefaultRootWindow(X11Ext.x11Display);
++
++        try {
++            bytes = getProperty(X11.XA_WINDOW, "_NET_CLIENT_LIST", rootWindow);
++        } catch (Exception e) {
++            try {
++                bytes = getProperty(X11.XA_CARDINAL, "_WIN_CLIENT_LIST", rootWindow);
++            } catch (Exception e1) {
++                System.err.println("Cannot get client list properties (_NET_CLIENT_LIST or _WIN_CLIENT_LIST)");
++            }
++        }
++
++        Window[] windowList = new Window[bytes.length / X11.Window.SIZE];
++
++        for (int i = 0; i < windowList.length; i++) {
++            windowList[i] = new X11.Window(bytesToInt(bytes, X11.XID.SIZE * i));
++        }
++        
++        for(Window win : windowList) {
++        	inflList.add(getWindow(X11Ext.x11Display, win));
++        }
++
++        return inflList;
+ 	}
++	private static int bytesToInt(byte[] prop) {
++        return ((prop[3] & 0xff) << 24)
++                | ((prop[2] & 0xff) << 16)
++                | ((prop[1] & 0xff) << 8)
++                | ((prop[0] & 0xff));
++    }
++
++    private static int bytesToInt(byte[] prop, int offset) {
++        return ((prop[3 + offset] & 0xff) << 24)
++                | ((prop[2 + offset] & 0xff) << 16)
++                | ((prop[1 + offset] & 0xff) << 8)
++                | ((prop[offset] & 0xff));
++    }
+ 	
++	private byte[] getProperty(X11.Atom xa_prop_type, String xa_prop_name, Window x11Window) {
++        return getProperty(xa_prop_type, getAtom(xa_prop_name), x11Window);
++    }
++	private X11.Atom getAtom(String name) {
++        return X11Ext.instance.XInternAtom(X11Ext.x11Display, name, false);
++    }
++	private byte[] getProperty(X11.Atom xa_prop_type, X11.Atom xa_prop_name, Window x11Window)  {
++        X11.AtomByReference xa_ret_type_ref = new X11.AtomByReference();
++        IntByReference ret_format_ref = new IntByReference();
++        NativeLongByReference ret_nitems_ref = new NativeLongByReference();
++        NativeLongByReference ret_bytes_after_ref = new NativeLongByReference();
++        PointerByReference ret_prop_ref = new PointerByReference();
++
++        NativeLong long_offset = new NativeLong(0);
++        NativeLong long_length = new NativeLong(4096 / 4);
++
++        /* MAX_PROPERTY_VALUE_LEN / 4 explanation (XGetWindowProperty manpage):
++         *
++         * long_length = Specifies the length in 32-bit multiples of the
++         *               data to be retrieved.
++         */
++        if (X11Ext.instance.XGetWindowProperty(X11Ext.x11Display, x11Window, xa_prop_name, long_offset, long_length, false,
++                xa_prop_type, xa_ret_type_ref, ret_format_ref,
++                ret_nitems_ref, ret_bytes_after_ref, ret_prop_ref) != X11.Success) {
++            String prop_name = X11Ext.instance.XGetAtomName(X11Ext.x11Display, xa_prop_name);
++            System.err.println("Cannot get " + prop_name + " property.");
++        }
++
++        X11.Atom xa_ret_type = xa_ret_type_ref.getValue();
++        Pointer ret_prop = ret_prop_ref.getValue();
++        
++        if( xa_ret_type == null ){
++        	//the specified property does not exist for the specified window
++        	return null;
++        }
++
++        if( xa_ret_type == null ){
++            //the specified property does not exist for the specified window
++            return null;
++        }
++
++        if( xa_ret_type == null ){
++            //the specified property does not exist for the specified window
++            return null;
++        }
++
++        if (xa_ret_type == null || xa_prop_type == null ||
++                !xa_ret_type.toNative().equals(xa_prop_type.toNative())) {
++        	X11Ext.instance.XFree(ret_prop);
++            String prop_name = X11Ext.instance.XGetAtomName(X11Ext.x11Display, xa_prop_name);
++            System.err.println("Invalid type of " + prop_name + " property");
++        }
++
++        int ret_format = ret_format_ref.getValue();
++        long ret_nitems = ret_nitems_ref.getValue().longValue();
++
++        // null terminate the result to make string handling easier
++        int nbytes = -123135;
++        if (ret_format == 32)
++            nbytes = Native.LONG_SIZE;
++        else if (ret_format == 16)
++            nbytes = Native.LONG_SIZE / 2;
++        else if (ret_format == 8)
++            nbytes = 1;
++        else if (ret_format == 0)
++            nbytes = 0;
++        else
++            System.err.println("Invalid return format");
++        int length = Math.min((int) ret_nitems * nbytes, 4096);
++
++        byte[] ret = ret_prop.getByteArray(0, length);
++
++        X11Ext.instance.XFree(ret_prop);
++        return ret;
++    }
++	public String getTitle(Window window){
++        try {
++            return getUtf8Property(getAtom("UTF8_STRING"), "_NET_WM_NAME", window);
++        } catch (Exception e) {
++            return getUtf8Property(X11.XA_STRING, X11.XA_WM_NAME, window);
++        }
++
++    }
++	/**
++     * Returns the property value as UTF8 string where every '\0' character is replaced by '.'.
++     *
++     * @param xa_prop_type property type
++     * @param xa_prop_name property name
++     * @return property value as UTF8 string where every '\0' character is replaced by '.'
++     * @throws X11Exception thrown if X11 window errors occurred
++     */
++    public String getUtf8Property(X11.Atom xa_prop_type, X11.Atom xa_prop_name, Window window) {
++        try {
++            byte[] property = getNullReplacedStringProperty(xa_prop_type, xa_prop_name, window);
++            if( property == null ){
++                return null;
++            }
++            return new String(property, "UTF8");
++        } catch (UnsupportedEncodingException e) {
++            e.printStackTrace();
++            return null;
++        }
++    }
++
++    /**
++     * Returns the property value as UTF8 string where every '\0' character is replaced by '.'.
++     *
++     * @param xa_prop_type property type
++     * @param xa_prop_name property name
++     * @return property value as UTF8 string where every '\0' character is replaced by '.'
++     * @throws X11Exception thrown if X11 window errors occurred
++     */
++    public String getUtf8Property(X11.Atom xa_prop_type, String xa_prop_name, Window window)  {
++        return getUtf8Property(xa_prop_type, getAtom(xa_prop_name), window);
++    }
++    /**
++     * Returns the property value as byte array where every '\0' character is replaced by '.'.
++     *
++     * @param xa_prop_type property type
++     * @param xa_prop_name property name
++     * @return property value as byte array where every '\0' character is replaced by '.'.  null if the property was not found
++     * @throws X11Exception thrown if X11 window errors occurred
++     */
++    public byte[] getNullReplacedStringProperty(X11.Atom xa_prop_type, X11.Atom xa_prop_name, Window window) {
++        byte[] bytes = getProperty(xa_prop_type, xa_prop_name, window);
++
++        if( bytes == null ){
++            return null;
++        }
++
++        // search for '\0'
++        int i;
++        for (i = 0; i < bytes.length; i++) {
++            if (bytes[i] == '\0') {
++                bytes[i] = '.';
++            }
++        }
++
++        return bytes;
++    }
++
++    /**
++     * Returns the property value as byte array where every '\0' character is replaced by '.'.
++     *
++     * @param xa_prop_type property type
++     * @param xa_prop_name property name
++     * @return property value as byte array where every '\0' character is replaced by '.'
++     * @throws X11Exception thrown if X11 window errors occurred
++     */
++    public byte[] getNullReplacedStringProperty(X11.Atom xa_prop_type, String xa_prop_name, Window window) {
++        return getNullReplacedStringProperty(xa_prop_type, getAtom(xa_prop_name), window);
++    }
++
++	
++	private WindowInfo getWindow(X11.Display display, int hwnd) {
++		return getWindow(display, new X11.Window(hwnd));
++	}
+ 	private WindowInfo getWindow(X11.Display display, X11.Window window) {
+-		XTextProperty wmName = new XTextProperty();
++		String wName = getTitle(window);
++		if(wName == null) {
++			System.err.println("Window Title null!");
++			return null;
++		}
+ 	    XWindowAttributes wmInfo = new XWindowAttributes();
+-
+-	    int status = X11Ext.instance.XGetWMName(display, 
+-	    		window, 
+-	    		wmName);
+-	    if(status == X11.Success && wmName.value != null && wmName.nitems != null) {
+-	    	status = X11Ext.instance.XGetWindowAttributes(display, window, wmInfo);
+-	    	if(status != 0) {
+-	    		WindowInfo.RECT rect = new WindowInfo.RECT();
+-	    		rect.top = wmInfo.y;
+-	    		rect.bottom = wmInfo.y+wmInfo.height;
+-	    		rect.left = wmInfo.x;
+-	    		rect.right= wmInfo.x+wmInfo.width;
+-	    		return new WindowInfo(window,
+-	    				rect,
+-	    				wmName.value);
+-	    	}
+-	    	return null;
+-	    }
+-	    return null;
++    	int status = X11Ext.instance.XGetWindowAttributes(display, window, wmInfo);
++		WindowInfo.RECT rect = new WindowInfo.RECT();
++		rect.top = wmInfo.y;
++		rect.bottom = wmInfo.y+wmInfo.height;
++		rect.left = wmInfo.x;
++		rect.right= wmInfo.x+wmInfo.width;
++		return new WindowInfo(window.intValue(),
++				rect,
++				wName);
+ 	}
+ 	
++	
+ 	@Override
+ 	public WindowInfo getTopWindow() {
+ 		return getWindows().get(getWindows().size()-1);
+@@ -161,7 +323,7 @@ public class X11Native extends WindowManager {
+ 	public synchronized WindowInfo updateWindow(WindowInfo w) throws WindowNotFoundException {
+ 		List<WindowInfo> windows = getWindows();
+ 		for(WindowInfo window : windows) {
+-			if(window.window.intValue() == w.window.intValue()) {
++			if(window.hwnd == w.hwnd) {
+ 				return window;
+ 			}
+ 		}
+@@ -172,7 +334,7 @@ public class X11Native extends WindowManager {
+ 	static interface X11Ext extends Library
+ 	{
+ 		final X11 instance = X11.INSTANCE;
+-		Display x11Display = instance.XOpenDisplay(null);
++		X11.Display x11Display = instance.XOpenDisplay(null);
+ 	}
+ 
+ 
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
+index 4b3f685..8fb3c72 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
+@@ -52,9 +52,9 @@ public class PacketListener extends Thread{
+ 				connectionSocket.setSoTimeout(20000);
+ 				System.out.println("Reading from client...");
+ 				String clientPacket = inFromClient.readLine();
+-				if(clientPacket == null)
++				if(clientPacket == null || clientPacket.equals("null"))
+ 				{
+-					System.out.println("Null :(");
++					System.out.println("Null packet received:(");
+ 					this.stopping = true;
+ 					this.interrupt();
+ 					break;
+@@ -64,7 +64,7 @@ public class PacketListener extends Thread{
+ 				
+ 				toSend = this.master.getProcessor().onPacketReceived(clientPacket);
+ 				if(toSend == null) {
+-					System.out.println("Null :(");
++					System.out.println("Null packet to send :(");
+ 					this.stopping = true;
+ 					this.interrupt();
+ 					break;
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
+index 4a8eade..d88dc4c 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
+@@ -27,8 +27,7 @@ import com.aptitekk.TeamScreen.Window.Util.JArrowButton;
+  */
+ public class NetHandler {
+ 	
+-	public static String PACKET_SEPARATOR_CONSTANT = "§";
+-	public static String PACKET_FILLER_CONSTANT = "¬";
++	public static String PACKET_SEPARATOR_CONSTANT = "~";
+ 	
+ 	TeamScreenDaemon parent;
+ 	private ServerSocket serverSocket;
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+index bb41537..211bfc9 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+@@ -40,13 +40,14 @@ public class PacketProcessor {
+ 					try {
+ 						return buildPacket(new String[]{"connectToMe",
+ 								TeamScreenBroadcastThread.getLanIP(),
+-								this.master.parent.properties.getConfig().getProperty("Slot"),
++								TeamScreenDaemon.properties.getConfig().getProperty("Slot"),
+ 								TeamScreenDaemon.windowPushed.getTitle()});
+ 					} catch (Exception exception) {
+ 						exception.printStackTrace();
+ 						return null;
+ 					}
+ 				} else {
++					System.err.println(packetSplit[1]);
+ 					return null;
+ 				}
+ 			}  else if(packetSplit[0].equalsIgnoreCase("connectToMe")){
+@@ -54,14 +55,17 @@ public class PacketProcessor {
+ 		        Integer[] ports = new Integer[]{4455, 4456, 4457, 4458, 4459, 4460};
+ 		        int port = ports[slots.indexOf(packetSplit[2])];
+ 				this.master.startNewJRCClient(packetSplit[1], port, packetSplit[3]);
++				System.out.println("Starting client, terminating communicator thread.");
+ 				return null;
+ 			} else {
++				System.out.println("Invalid packet header received. \"" + packetReceived + "\" len: "+packetSplit.length);
+ 				return null;
+ 			}
+ 		else {
+-			if(packetSplit[0].equalsIgnoreCase("request")) {
++			if(packetReceived.equalsIgnoreCase("request")) {
+ 				return buildPacket(new String[]{"request","accept"});
+ 			}else {
++				System.out.println("Invalid packet header received. \"" + packetReceived + "\" len: "+packetSplit.length);
+ 				return null;
+ 			}
+ 		}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Util/WindowInfo.java b/TeamScreen/src/com/aptitekk/TeamScreen/Util/WindowInfo.java
+index a1d17de..58a1a11 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Util/WindowInfo.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Util/WindowInfo.java
+@@ -28,18 +28,14 @@ public class WindowInfo {
+ 	}
+ 	
+ 	public int hwnd;
+-	public X11.Window window;
+ 	RECT rect;
+ 	String title;
+ 	public WindowInfo(int hwnd, RECT rect, String title)
+ 	{ this.hwnd = hwnd; this.rect = rect; this.title = title; }
+-	
+-	public WindowInfo(X11.Window window, RECT rect, String title)
+-	{ this.window = window; this.rect = rect; this.title = title;}
+ 
+ 	public String toString() {
+-		return String.format("(%d,%d)-(%d,%d) : \"%s\"",
+-				rect.left,rect.top,rect.right,rect.bottom,title);
++		return String.format("(%d,%d)-(%d,%d) : \"%s\" : ID: %d",
++				rect.left,rect.top,rect.right,rect.bottom,title,hwnd);
+ 	}
+ 	
+ 	public String getTitle() {
+-- 
+2.39.5 (Apple Git-154)
+

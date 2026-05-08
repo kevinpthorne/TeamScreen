@@ -1,0 +1,59 @@
+From da63b9841df7283437907610a7da754ebe20cc1a Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Mon, 7 Apr 2014 17:18:36 -0600
+Subject: [PATCH 031/101] fixed packets (outofbounds)
+
+---
+ .../TeamScreen/Net/PacketProcessor.java       | 24 +++++++++++++++----
+ 1 file changed, 19 insertions(+), 5 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+index fb7ad17..bb41537 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+@@ -38,10 +38,10 @@ public class PacketProcessor {
+ 					//start jrc server
+ 					this.master.startNewJRCServer(TeamScreenDaemon.windowPushed);
+ 					try {
+-						return "connectToMe"+NetHandler.PACKET_SEPARATOR_CONSTANT+TeamScreenBroadcastThread.getLanIP()+
+-								NetHandler.PACKET_SEPARATOR_CONSTANT+
+-								this.master.parent.properties.getConfig().getProperty("Slot")+
+-								TeamScreenDaemon.windowPushed.getTitle();
++						return buildPacket(new String[]{"connectToMe",
++								TeamScreenBroadcastThread.getLanIP(),
++								this.master.parent.properties.getConfig().getProperty("Slot"),
++								TeamScreenDaemon.windowPushed.getTitle()});
+ 					} catch (Exception exception) {
+ 						exception.printStackTrace();
+ 						return null;
+@@ -60,12 +60,26 @@ public class PacketProcessor {
+ 			}
+ 		else {
+ 			if(packetSplit[0].equalsIgnoreCase("request")) {
+-				return "request"+NetHandler.PACKET_SEPARATOR_CONSTANT+"accept";
++				return buildPacket(new String[]{"request","accept"});
+ 			}else {
+ 				return null;
+ 			}
+ 		}
+ 		
+ 	}
++	
++	private String buildPacket(String[] args) {
++		String finalPacket = "";
++		int i = 0;
++		for(String s : args) {
++			i++;
++			//if(i != args.length) {
++				finalPacket = finalPacket + s + NetHandler.PACKET_SEPARATOR_CONSTANT;
++			//} else {
++				//finalPacket = finalPacket + s;
++			//}
++		}
++		return finalPacket;
++	}
+ 
+ }
+-- 
+2.39.5 (Apple Git-154)
+

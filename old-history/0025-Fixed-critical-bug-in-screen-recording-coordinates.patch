@@ -1,0 +1,25 @@
+From ac9423fd2a1c8fcb78f74ede4a83a09e66171ae2 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 6 Apr 2014 22:20:59 -0600
+Subject: [PATCH 025/101] Fixed critical bug in screen recording coordinates
+
+---
+ .../com/aptitekk/TeamScreen/Net/jrc/WindowScreenRecorder.java   | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowScreenRecorder.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowScreenRecorder.java
+index f9316f3..ec415bf 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowScreenRecorder.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowScreenRecorder.java
+@@ -44,7 +44,7 @@ public class WindowScreenRecorder extends ScreenRecorder{
+ 	private Rectangle getWindowRect() {
+ 		Point topleft = new Point(this.window.getRect()[0], this.window.getRect()[1]);
+ 		Point bottomright = new Point(this.window.getRect()[2], this.window.getRect()[3]);
+-		return new Rectangle(topleft.x, bottomright.x, bottomright.x - topleft.x, bottomright.y - topleft.y);
++		return new Rectangle(topleft.x, topleft.y, bottomright.x - topleft.x, bottomright.y - topleft.y);
+ 	}
+ 
+ 	@Override
+-- 
+2.39.5 (Apple Git-154)
+

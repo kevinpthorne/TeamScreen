@@ -1,0 +1,40 @@
+From b1308adff1617679fb03f298c1a392d21d6dc214 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 21 May 2014 08:18:42 -0600
+Subject: [PATCH 048/101] Fixed tagging windows with handles instead of titles
+ 8D
+
+---
+ TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java   | 2 +-
+ .../src/com/aptitekk/TeamScreen/Window/Util/WindowUtil.java     | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java
+index 8a626a1..973eca4 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java
+@@ -113,7 +113,7 @@ public class WindowsNative extends WindowManager {
+ 	public synchronized WindowInfo updateWindow(WindowInfo w) throws WindowNotFoundException {
+ 		List<WindowInfo> windows = getWindows();
+ 		for(WindowInfo window : windows) {
+-			if(window.getTitle().equals(w.getTitle())) {
++			if(window.hwnd == w.hwnd) {
+ 				return window;
+ 			}
+ 		}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/WindowUtil.java b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/WindowUtil.java
+index 0cf6122..50424a7 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/WindowUtil.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/WindowUtil.java
+@@ -164,7 +164,7 @@ public class WindowUtil {
+ 	public synchronized static WindowInfo updateWindow(WindowInfo w) throws WindowNotFoundException {
+ 		List<WindowInfo> windows = getWindows();
+ 		for(WindowInfo window : windows) {
+-			if(window.getTitle().equals(w.getTitle())) {
++			if(window.hwnd == w.hwnd) {
+ 				return window;
+ 			}
+ 		}
+-- 
+2.39.5 (Apple Git-154)
+

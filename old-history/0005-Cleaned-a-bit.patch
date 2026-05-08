@@ -1,0 +1,53 @@
+From d4af715facf03b4bd6e30c0de23169dd377b392b Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Thu, 3 Apr 2014 23:08:07 -0600
+Subject: [PATCH 005/101] Cleaned a bit
+
+---
+ TeamScreen/src/com/aptitekk/TeamScreen/FolderManager.java | 3 +--
+ .../src/com/aptitekk/TeamScreen/TeamScreenDaemon.java     | 8 ++++++--
+ 2 files changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/FolderManager.java b/TeamScreen/src/com/aptitekk/TeamScreen/FolderManager.java
+index 561e587..63a3258 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/FolderManager.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/FolderManager.java
+@@ -154,8 +154,7 @@ public class FolderManager {
+         URL imageURL = TeamScreenDaemon.class.getResource(path);
+          
+         if (imageURL == null) {
+-            System.err.println("Resource not found: " + path);
+-            return null;
++            throw new NullPointerException("Resource not found: " + path);
+         } else {
+             return (new ImageIcon(imageURL, description)).getImage();
+         }
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index ac93c73..d7bbc91 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -54,7 +54,7 @@ public class TeamScreenDaemon {
+ 	
+ 	private TeamScreenDaemon() {
+ 		TSDaemon = this;
+-		logger.info("Starting ClassManager...");
++		logger.info("Starting TeamScreen...");
+ 		try{
+ 			properties = new PropertiesHandler();
+ 			
+@@ -98,7 +98,11 @@ public class TeamScreenDaemon {
+             return;
+         }
+         final PopupMenu popup = new PopupMenu();
+-        trayIcon = new TrayIcon(FolderManager.createImage("/images/icon.png", "tray icon"));
++        try {
++        	trayIcon = new TrayIcon(FolderManager.createImage("/images/icon.png", "tray icon"));
++        } catch (Exception e){
++        	trayIcon = new TrayIcon(null);
++        }
+          
+         // Create a popup menu components
+         MenuItem openItem = new MenuItem("Open");
+-- 
+2.39.5 (Apple Git-154)
+

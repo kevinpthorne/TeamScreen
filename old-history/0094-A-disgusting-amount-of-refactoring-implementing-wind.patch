@@ -1,0 +1,4534 @@
+From 064e27106ac9c6b56eff0b58a1d4c44897660d71 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Tue, 3 Nov 2015 20:08:05 -0700
+Subject: [PATCH 094/101] A disgusting amount of refactoring, implementing
+ window renders that are behind other windows on Windows, currently working
+ with resizing.
+
+---
+ TeamScreen/.classpath                         |  45 +-
+ .../TeamScreen/AutoUpdater/Authenticator.java |   6 +
+ .../TeamScreen/AutoUpdater/AutoUpdater.java   |   1 +
+ .../AutoUpdaterDownloadThread.java            |   7 +-
+ .../AutoUpdater/ChangeLogDialog.java          |   7 +-
+ .../TeamScreen/AutoUpdater/CustomRNG.java     |   7 +-
+ .../AutoUpdater/DLProgressListener.java       |   7 +-
+ .../AutoUpdater/DownloadDialog.java           |   7 +-
+ .../AutoUpdater/EncryptedProperties.java      |   7 +-
+ .../TeamScreen/AutoUpdater/Handshake.java     |   7 +-
+ .../TeamScreen/AutoUpdater/LevelEnum.java     |   7 +-
+ .../TeamScreen/AutoUpdater/URLUtils.java      |   7 +-
+ .../AutoUpdater/UpdaterListener.java          |   7 +-
+ .../TeamScreen/Frames/WindowSelect.java       | 430 ++++++------
+ .../TeamScreen/JNA/WindowManager.java         |  79 ++-
+ .../TeamScreen/JNA/WindowsNative.java         | 395 ++++++-----
+ .../aptitekk/TeamScreen/JNA/X11Native.java    | 280 ++++----
+ .../TeamScreen/Net/PacketProcessor.java       | 179 ++---
+ .../Net/jrc/DynamicJRCServerApplication.java  | 335 +++++-----
+ .../Server/DynamicRemoteControlServer.java    | 620 +++++++++---------
+ .../Net/jrc/Server/DynamicScreenRecorder.java | 240 -------
+ .../Server/DynamicWindowScreenRecorder.java   | 333 ++++++++++
+ .../Net/jrc/Server/WindowControlAdapter.java  | 130 ++--
+ .../Net/jrc/Server/WindowScreenRecorder.java  |  90 ---
+ .../{ => Properties}/PropertiesHandler.java   |   6 +-
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java | 301 +++++----
+ .../aptitekk/TeamScreen/Util/WindowInfo.java  | 104 +--
+ .../TeamScreen/Window/Util/WindowUtil.java    | 349 +++++-----
+ 28 files changed, 2101 insertions(+), 1892 deletions(-)
+ delete mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicScreenRecorder.java
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicWindowScreenRecorder.java
+ delete mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowScreenRecorder.java
+ rename TeamScreen/src/com/aptitekk/TeamScreen/{ => Properties}/PropertiesHandler.java (96%)
+
+diff --git a/TeamScreen/.classpath b/TeamScreen/.classpath
+index 983fb52..4a62a31 100644
+--- a/TeamScreen/.classpath
++++ b/TeamScreen/.classpath
+@@ -1,22 +1,23 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+-<classpath>
+-	<classpathentry kind="src" path="src"/>
+-	<classpathentry kind="src" path="lib"/>
+-	<classpathentry kind="lib" path="lib/core.jar"/>
+-	<classpathentry kind="lib" path="lib/java-remote-control-with-source.jar"/>
+-	<classpathentry kind="lib" path="lib/jna-4.1.0.jar">
+-		<attributes>
+-			<attribute name="javadoc_location" value="http://twall.github.io/jna/4.1.0/"/>
+-		</attributes>
+-	</classpathentry>
+-	<classpathentry kind="lib" path="lib/jna-platform-4.1.0.jar">
+-		<attributes>
+-			<attribute name="javadoc_location" value="http://twall.github.io/jna/4.1.0/"/>
+-		</attributes>
+-	</classpathentry>
+-	<classpathentry kind="lib" path="lib/open-forum.jar"/>
+-	<classpathentry kind="lib" path="lib/jintellitype-1.3.9.jar"/>
+-	<classpathentry kind="lib" path="lib/commons-io-2.4.jar"/>
+-	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+-	<classpathentry kind="output" path="bin"/>
+-</classpath>
++<?xml version="1.0" encoding="UTF-8"?>
++<classpath>
++	<classpathentry kind="src" path="src"/>
++	<classpathentry kind="src" path="lib"/>
++	<classpathentry kind="src" path="secure"/>
++	<classpathentry kind="lib" path="lib/core.jar"/>
++	<classpathentry kind="lib" path="lib/java-remote-control-with-source.jar"/>
++	<classpathentry kind="lib" path="lib/jna-4.1.0.jar">
++		<attributes>
++			<attribute name="javadoc_location" value="http://twall.github.io/jna/4.1.0/"/>
++		</attributes>
++	</classpathentry>
++	<classpathentry kind="lib" path="lib/jna-platform-4.1.0.jar">
++		<attributes>
++			<attribute name="javadoc_location" value="http://twall.github.io/jna/4.1.0/"/>
++		</attributes>
++	</classpathentry>
++	<classpathentry kind="lib" path="lib/open-forum.jar"/>
++	<classpathentry kind="lib" path="lib/jintellitype-1.3.9.jar"/>
++	<classpathentry kind="lib" path="lib/commons-io-2.4.jar"/>
++	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
++	<classpathentry kind="output" path="bin"/>
++</classpath>
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/Authenticator.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/Authenticator.java
+index 1f3faeb..100489f 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/Authenticator.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/Authenticator.java
+@@ -6,6 +6,12 @@ import java.io.FileInputStream;
+ import java.io.FileNotFoundException;
+ import java.io.FileOutputStream;
+ 
++/**
++ * @author Mitchell Talmadge
++ * 
++ * Used under permission
++ *
++ */
+ public class Authenticator
+ {
+     private static final Object synchronizedObject = new Object();
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
+index 8a257eb..4e80f8a 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
+@@ -22,6 +22,7 @@ import org.apache.commons.io.FileUtils;
+  * 
+  * @author Mitch Talmadge
+  *
++ * Used with permission
+  */
+ public class AutoUpdater
+ {
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
+index ae62c66..19078bc 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
+@@ -7,7 +7,12 @@ import java.net.URL;
+ import java.net.URLConnection;
+ import java.util.logging.Level;
+ 
+-
++/**
++ * @author Mitchell Talmadge
++ * 
++ * Used under permission
++ *
++ */
+ public class AutoUpdaterDownloadThread extends Thread
+ {
+     
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/ChangeLogDialog.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/ChangeLogDialog.java
+index a666030..e4fdad3 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/ChangeLogDialog.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/ChangeLogDialog.java
+@@ -29,7 +29,12 @@ import javax.swing.JScrollPane;
+ import javax.swing.JTextPane;
+ import javax.swing.border.EmptyBorder;
+ import javax.swing.border.MatteBorder;
+-
++/**
++ * @author Mitchell Talmadge
++ * 
++ * Used under permission
++ *
++ */
+ public class ChangeLogDialog extends JFrame implements MouseListener
+ {
+     
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/CustomRNG.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/CustomRNG.java
+index aa4a987..54ab473 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/CustomRNG.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/CustomRNG.java
+@@ -1,5 +1,10 @@
+ package com.aptitekk.TeamScreen.AutoUpdater;
+-
++/**
++ * @author Mitchell Talmadge
++ * 
++ * Used under permission
++ *
++ */
+ public class CustomRNG
+ {
+     private long seed = 0;
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DLProgressListener.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DLProgressListener.java
+index 27f1ba7..9d2f46c 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DLProgressListener.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DLProgressListener.java
+@@ -1,5 +1,10 @@
+ package com.aptitekk.TeamScreen.AutoUpdater;
+-
++/**
++ * @author Mitchell Talmadge
++ * 
++ * Used under permission
++ *
++ */
+ public interface DLProgressListener
+ {
+     
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DownloadDialog.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DownloadDialog.java
+index 7368e35..7a30938 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DownloadDialog.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DownloadDialog.java
+@@ -30,7 +30,12 @@ import javax.swing.border.EmptyBorder;
+ import javax.swing.border.MatteBorder;
+ 
+ import org.one.stone.soup.reloader.UpdateListener;
+-
++/**
++ * @author Mitchell Talmadge
++ * 
++ * Used under permission
++ *
++ */
+ public class DownloadDialog extends JFrame implements DLProgressListener, MouseListener
+ {
+     
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/EncryptedProperties.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/EncryptedProperties.java
+index 4483617..0f336e7 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/EncryptedProperties.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/EncryptedProperties.java
+@@ -6,7 +6,12 @@ import javax.crypto.Cipher;
+ import javax.crypto.SecretKey;
+ import javax.crypto.SecretKeyFactory;
+ import javax.crypto.spec.PBEParameterSpec;
+-
++/**
++ * @author Mitchell Talmadge
++ * 
++ * Used under permission
++ *
++ */
+ public class EncryptedProperties extends Properties {
+ 	private static sun.misc.BASE64Decoder decoder = new sun.misc.BASE64Decoder();
+ 	private static sun.misc.BASE64Encoder encoder = new sun.misc.BASE64Encoder();
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/Handshake.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/Handshake.java
+index 1f7ae21..0e09f46 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/Handshake.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/Handshake.java
+@@ -5,7 +5,12 @@ import java.math.BigInteger;
+ import java.nio.ByteBuffer;
+ import java.util.ArrayList;
+ import java.util.Arrays;
+-
++/**
++ * @author Mitchell Talmadge
++ * 
++ * Used under permission
++ *
++ */
+ public class Handshake
+ {
+     
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/LevelEnum.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/LevelEnum.java
+index f253ea4..b043221 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/LevelEnum.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/LevelEnum.java
+@@ -1,5 +1,10 @@
+ package com.aptitekk.TeamScreen.AutoUpdater;
+-
++/**
++ * @author Mitchell Talmadge
++ * 
++ * Used under permission
++ *
++ */
+ public enum LevelEnum
+ {
+     
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/URLUtils.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/URLUtils.java
+index bb04add..99edbaf 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/URLUtils.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/URLUtils.java
+@@ -11,7 +11,12 @@ import java.io.InputStream;
+ import java.io.InputStreamReader;
+ import java.net.URLConnection;
+ import java.util.ArrayList;
+-
++/**
++ * @author Mitchell Talmadge
++ * 
++ * Used under permission
++ *
++ */
+ public class URLUtils
+ {
+     
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/UpdaterListener.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/UpdaterListener.java
+index dd3a23e..a205df0 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/UpdaterListener.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/UpdaterListener.java
+@@ -1,6 +1,11 @@
+ package com.aptitekk.TeamScreen.AutoUpdater;
+ 
+-
++/**
++ * @author Mitchell Talmadge
++ * 
++ * Used under permission
++ *
++ */
+ public interface UpdaterListener
+ {
+     
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
+index cc9b357..fc48bf8 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
+@@ -1,214 +1,216 @@
+-package com.aptitekk.TeamScreen.Frames;
+-
+-import java.awt.BorderLayout;
+-import java.awt.Color;
+-import java.awt.Dimension;
+-import java.awt.Graphics;
+-import java.awt.Graphics2D;
+-import java.awt.Point;
+-import java.awt.Rectangle;
+-import java.awt.Window;
+-import java.awt.event.KeyEvent;
+-import java.awt.event.KeyListener;
+-import java.awt.event.MouseEvent;
+-import java.awt.event.MouseListener;
+-import java.util.ArrayList;
+-import java.util.List;
+-
+-import javax.swing.JFrame;
+-import javax.swing.JLabel;
+-import javax.swing.JOptionPane;
+-import javax.swing.JPanel;
+-
+-import com.aptitekk.TeamScreen.TeamScreenDaemon;
+-import com.aptitekk.TeamScreen.Util.WindowInfo;
+-import com.aptitekk.TeamScreen.Window.Util.WindowUtil;
+-
+-/**
+- * This is the window that appears to ask what window you want to select
+- *
+- * @author kevint.
+- *         Created Apr 5, 2014.
+- */
+-public class WindowSelect extends JFrame implements MouseListener, KeyListener{
+-
+-	TeamScreenDaemon master;
+-	
+-	boolean translucencySupported = false;
+-	
+-	public WindowSelect(TeamScreenDaemon master) {
+-		
+-		this.master = master;
+-		
+-		if(TeamScreenDaemon.getWindowManager().getWindows().isEmpty()) {
+-			JOptionPane.showMessageDialog(null,
+-				    "No windows were found",
+-				    "No Windows Found",
+-				    JOptionPane.ERROR_MESSAGE);
+-			return;
+-		}
+-		
+-		this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Already there
+-	    this.setExtendedState(JFrame.MAXIMIZED_BOTH);
+-	    this.setUndecorated(true);
+-	    
+-	    try {
+-	    	this.setOpacity(0.55f);
+-	    } catch (UnsupportedOperationException e) {
+-	    	if(e.getMessage().contains("translucency"))
+-	    		translucencySupported = false;
+-	    	else
+-	    		e.printStackTrace();
+-	    }
+-	    
+-	    this.setBackground(Color.BLACK);
+-	    this.setGlassPane(new JPanel());
+-	    this.getGlassPane().setVisible(true);
+-	    
+-	    initGui();
+-	    
+-	    this.pack();
+-	    this.setVisible(true);
+-	    this.addMouseListener(this);
+-	    this.addKeyListener(this);
+-	}
+-	
+-	private void initGui() {
+-		Dimension screenSize = java.awt.Toolkit.getDefaultToolkit().getScreenSize();
+-		
+-		Squares squaresPanel = new Squares();
+-		
+-		if(!translucencySupported) {
+-			for(WindowInfo w : TeamScreenDaemon.getWindowManager().getWindows()) {
+-				try {
+-					if(w == null)
+-						throw new NullPointerException("WindowInfo list returned entry is null");
+-					if(!w.getTitle().equals(""))
+-						squaresPanel.addSquare(w.getRect()[0], w.getRect()[1], w.getRect()[2], w.getRect()[3]);
+-				} catch (NullPointerException e) {
+-					e.printStackTrace();
+-					JOptionPane.showMessageDialog(null,
+-						    e.getMessage() + "\n Length: "+TeamScreenDaemon.getWindowManager().getWindows().size(),
+-						    "NullPointerException",
+-						    JOptionPane.ERROR_MESSAGE);
+-					break;
+-				}
+-			}
+-		}
+-		this.add(squaresPanel);
+-		
+-		JPanel pane = new JPanel(new BorderLayout());
+-		JLabel infoText = new JLabel("<html><p style='font-size:40px;height=50%;width=50%;'>Select window to share.</p></html>");
+-		
+-		pane.add(infoText);
+-		
+-		((JPanel)this.getGlassPane()).add(pane);
+-	}
+-
+-	@Override
+-	public void mouseClicked(MouseEvent e) {
+-		//window selection jazz here
+-		Point where = e.getLocationOnScreen();
+-		int x = where.x;
+-		int y = where.y;
+-		for(WindowInfo w : TeamScreenDaemon.getWindowManager().getWindows()) {
+-			System.out.println(w.toString());
+-			//check if point intersects with any window, and remove other crap
+-			if(!w.getTitle().equals("")) {
+-				//if(WindowUtil.getTopWindow().equals(w)) {
+-					if(w.getRect()[0] <= x && w.getRect()[2] >= x) {
+-						if(w.getRect()[1] <= y && w.getRect()[3] >= y) {
+-							master.openPushSelect(w);
+-							System.out.println(w.getTitle());
+-							break;
+-						}
+-					} else {
+-						System.out.println("None found");
+-					}
+-				//}
+-			}
+-			
+-			/*for(int c : WindowUtil.getWindowRect(w.getTitle())) {
+-				if(w.getTitle() == null) {
+-					//pass
+-				} else if(w.getTitle().equals("")) {
+-					//pass
+-				} else {
+-					System.out.println("getWindowRect("+w.getTitle()+"): " + c);
+-				}
+-				
+-			}
+-			for(int c : w.getRect()) {
+-				if(w.getTitle() == null) {
+-					//pass
+-				} else if(w.getTitle().equals("")) {
+-						//pass
+-				} else {
+-					System.out.println("getRect("+w.getTitle()+"): " + c);
+-				}
+-				
+-			}*/
+-			
+-		}
+-		
+-		this.dispose();
+-	}
+-
+-	@Override
+-	public void mouseEntered(MouseEvent e) {
+-		;
+-	}
+-
+-	@Override
+-	public void mouseExited(MouseEvent e) {
+-		;
+-	}
+-
+-	@Override
+-	public void mousePressed(MouseEvent e) {
+-		//this.setVisible(false);
+-	}
+-
+-	@Override
+-	public void mouseReleased(MouseEvent e) {
+-	}
+-
+-	@Override
+-	public void keyPressed(KeyEvent e) {;}
+-
+-	@Override
+-	public void keyReleased(KeyEvent e) {
+-		if(e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+-			this.dispose();
+-		}
+-	}
+-
+-	@Override
+-	public void keyTyped(KeyEvent arg0) {;}
+-
+-	class Squares extends JPanel {
+-		private static final int PREF_W = 500;
+-		private static final int PREF_H = PREF_W;
+-		private List<Rectangle> squares = new ArrayList<Rectangle>();
+-
+-		public void addSquare(int x, int y, int width, int height) {
+-			Rectangle rect = new Rectangle(x, y, width, height);
+-			squares.add(rect);
+-		}
+-
+-		@Override
+-		public Dimension getPreferredSize() {
+-			return new Dimension(PREF_W, PREF_H);
+-		}
+-
+-		@Override
+-		protected void paintComponent(Graphics g) {
+-			super.paintComponent(g);
+-			Graphics2D g2 = (Graphics2D) g;
+-			for (Rectangle rect : squares) {
+-				g2.draw(rect);
+-			}
+-		}
+-
+-	}
+-}
++package com.aptitekk.TeamScreen.Frames;
++
++import java.awt.BorderLayout;
++import java.awt.Color;
++import java.awt.Dimension;
++import java.awt.Graphics;
++import java.awt.Graphics2D;
++import java.awt.Point;
++import java.awt.Rectangle;
++import java.awt.Window;
++import java.awt.event.KeyEvent;
++import java.awt.event.KeyListener;
++import java.awt.event.MouseEvent;
++import java.awt.event.MouseListener;
++import java.util.ArrayList;
++import java.util.List;
++
++import javax.swing.JFrame;
++import javax.swing.JLabel;
++import javax.swing.JOptionPane;
++import javax.swing.JPanel;
++
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++import com.aptitekk.TeamScreen.Util.WindowInfo;
++import com.aptitekk.TeamScreen.Window.Util.WindowUtil;
++
++/**
++ * This is the window that appears to ask what window you want to select
++ *
++ * @author kevint.
++ *         Created Apr 5, 2014.
++ */
++public class WindowSelect extends JFrame implements MouseListener, KeyListener{
++
++	TeamScreenDaemon master;
++	
++	boolean translucencySupported = false;
++	
++	public WindowSelect(TeamScreenDaemon master) {
++		
++		this.master = master;
++		
++		if(TeamScreenDaemon.getWindowManager().getWindows().isEmpty()) {
++			JOptionPane.showMessageDialog(null,
++				    "No windows were found",
++				    "No Windows Found",
++				    JOptionPane.ERROR_MESSAGE);
++			return;
++		}
++		
++		this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Already there
++	    this.setExtendedState(JFrame.MAXIMIZED_BOTH);
++	    this.setUndecorated(true);
++	    
++	    try {
++	    	this.setOpacity(0.55f);
++	    } catch (UnsupportedOperationException e) {
++	    	if(e.getMessage().contains("translucency"))
++	    		translucencySupported = false;
++	    	else
++	    		e.printStackTrace();
++	    }
++	    
++	    this.setBackground(Color.BLACK);
++	    this.setGlassPane(new JPanel());
++	    this.getGlassPane().setVisible(true);
++	    
++	    initGui();
++	    
++	    this.pack();
++	    this.setVisible(true);
++	    this.addMouseListener(this);
++	    this.addKeyListener(this);
++	}
++	
++	private void initGui() {
++		Dimension screenSize = java.awt.Toolkit.getDefaultToolkit().getScreenSize();
++		
++		Squares squaresPanel = new Squares();
++		
++		if(!translucencySupported) {
++			for(WindowInfo w : TeamScreenDaemon.getWindowManager().getWindows()) {
++				try {
++					if(w == null)
++						throw new NullPointerException("WindowInfo list returned entry is null");
++					if(!w.getTitle().equals(""))
++						squaresPanel.addSquare(w.getRelativeRectangle().x, w.getRelativeRectangle().y, 
++								w.getRelativeRectangle().x + w.getRelativeRectangle().width, 
++								w.getRelativeRectangle().y + w.getRelativeRectangle().height);
++				} catch (NullPointerException e) {
++					e.printStackTrace();
++					JOptionPane.showMessageDialog(null,
++						    e.getMessage() + "\n Length: "+TeamScreenDaemon.getWindowManager().getWindows().size(),
++						    "NullPointerException",
++						    JOptionPane.ERROR_MESSAGE);
++					break;
++				}
++			}
++		}
++		this.add(squaresPanel);
++		
++		JPanel pane = new JPanel(new BorderLayout());
++		JLabel infoText = new JLabel("<html><p style='font-size:40px;height=50%;width=50%;'>Select window to share.</p></html>");
++		
++		pane.add(infoText);
++		
++		((JPanel)this.getGlassPane()).add(pane);
++	}
++
++	@Override
++	public void mouseClicked(MouseEvent e) {
++		//window selection jazz here
++		Point where = e.getLocationOnScreen();
++		int x = where.x;
++		int y = where.y;
++		for(WindowInfo w : TeamScreenDaemon.getWindowManager().getWindows()) {
++			System.out.println(w.toString());
++			//check if point intersects with any window, and remove other crap
++			if(!w.getTitle().equals("")) {
++				//if(WindowUtil.getTopWindow().equals(w)) {
++					if(w.getRelativeRectangle().x <= x && w.getRelativeRectangle().x + w.getRelativeRectangle().width >= x) {
++						if(w.getRelativeRectangle().y <= y && w.getRelativeRectangle().y + w.getRelativeRectangle().height >= y) {
++							master.openPushSelect(w);
++							System.out.println(w.getTitle());
++							break;
++						}
++					} else {
++						System.out.println("None found");
++					}
++				//}
++			}
++			
++			/*for(int c : WindowUtil.getWindowRect(w.getTitle())) {
++				if(w.getTitle() == null) {
++					//pass
++				} else if(w.getTitle().equals("")) {
++					//pass
++				} else {
++					System.out.println("getWindowRect("+w.getTitle()+"): " + c);
++				}
++				
++			}
++			for(int c : w.getRect()) {
++				if(w.getTitle() == null) {
++					//pass
++				} else if(w.getTitle().equals("")) {
++						//pass
++				} else {
++					System.out.println("getRect("+w.getTitle()+"): " + c);
++				}
++				
++			}*/
++			
++		}
++		
++		this.dispose();
++	}
++
++	@Override
++	public void mouseEntered(MouseEvent e) {
++		;
++	}
++
++	@Override
++	public void mouseExited(MouseEvent e) {
++		;
++	}
++
++	@Override
++	public void mousePressed(MouseEvent e) {
++		//this.setVisible(false);
++	}
++
++	@Override
++	public void mouseReleased(MouseEvent e) {
++	}
++
++	@Override
++	public void keyPressed(KeyEvent e) {;}
++
++	@Override
++	public void keyReleased(KeyEvent e) {
++		if(e.getKeyCode() == KeyEvent.VK_ESCAPE) {
++			this.dispose();
++		}
++	}
++
++	@Override
++	public void keyTyped(KeyEvent arg0) {;}
++
++	class Squares extends JPanel {
++		private static final int PREF_W = 500;
++		private static final int PREF_H = PREF_W;
++		private List<Rectangle> squares = new ArrayList<Rectangle>();
++
++		public void addSquare(int x, int y, int width, int height) {
++			Rectangle rect = new Rectangle(x, y, width, height);
++			squares.add(rect);
++		}
++
++		@Override
++		public Dimension getPreferredSize() {
++			return new Dimension(PREF_W, PREF_H);
++		}
++
++		@Override
++		protected void paintComponent(Graphics g) {
++			super.paintComponent(g);
++			Graphics2D g2 = (Graphics2D) g;
++			for (Rectangle rect : squares) {
++				g2.draw(rect);
++			}
++		}
++
++	}
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManager.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManager.java
+index e4c7e76..e57206c 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManager.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManager.java
+@@ -1,35 +1,44 @@
+-package com.aptitekk.TeamScreen.JNA;
+-
+-import java.util.List;
+-
+-import com.aptitekk.TeamScreen.Util.WindowInfo;
+-
+-public abstract class WindowManager {
+-	
+-	public abstract List<WindowInfo> getWindows();
+-	public abstract WindowInfo getTopWindow();
+-	
+-	public abstract int[] getWindowRect(int hwnd);
+-	public abstract WindowInfo getWindowbyTitle(String windowTitle) throws WindowNotFoundException;
+-	
+-	public abstract WindowInfo updateWindow(WindowInfo w) throws WindowNotFoundException;
+-	
+-	public abstract void bringWindowToFront(WindowInfo w) throws WindowNotFoundException;
+-
+-	
+-	@SuppressWarnings("serial")
+-	public static class WindowNotFoundException extends Exception {
+-		public WindowNotFoundException(String className, String windowName) {
+-			super(String.format("Window null for className: %s; windowName: %s", 
+-					className, windowName));
+-		}
+-	}
+-
+-	@SuppressWarnings("serial")
+-	public static class GetWindowRectException extends Exception {
+-		public GetWindowRectException(String windowName) {
+-			super("Window Rect not found for " + windowName);
+-		}
+-	}
+-
+-}
++package com.aptitekk.TeamScreen.JNA;
++
++import java.awt.AWTException;
++import java.awt.Rectangle;
++import java.awt.Robot;
++import java.awt.image.BufferedImage;
++import java.util.List;
++
++import com.aptitekk.TeamScreen.Util.WindowInfo;
++
++public abstract class WindowManager {
++	
++	public abstract List<WindowInfo> getWindows();
++	public abstract WindowInfo getTopWindow();
++	
++	public abstract int[] getWindowRect(int hwnd);
++	public abstract Rectangle getDisplayRectangle(int hwnd);
++	public abstract WindowInfo getWindowbyTitle(String windowTitle) throws WindowNotFoundException;
++	
++	public abstract WindowInfo updateWindow(WindowInfo w) throws WindowNotFoundException;
++	
++	public abstract void bringWindowToFront(WindowInfo w) throws WindowNotFoundException;
++	
++	public BufferedImage captureWindow(WindowInfo w) throws AWTException {
++		return new Robot().createScreenCapture(WindowInfo.convertArrayToRectangle(getWindowRect(w.hwnd)));
++	}
++
++	
++	@SuppressWarnings("serial")
++	public static class WindowNotFoundException extends Exception {
++		public WindowNotFoundException(String className, String windowName) {
++			super(String.format("Window null for className: %s; windowName: %s", 
++					className, windowName));
++		}
++	}
++
++	@SuppressWarnings("serial")
++	public static class GetWindowRectException extends Exception {
++		public GetWindowRectException(String windowName) {
++			super("Window Rect not found for " + windowName);
++		}
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java
+index 25dad32..4b328e9 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java
+@@ -1,155 +1,240 @@
+-package com.aptitekk.TeamScreen.JNA;
+-
+-import java.util.ArrayList;
+-import java.util.Collections;
+-import java.util.Comparator;
+-import java.util.List;
+-
+-import com.aptitekk.TeamScreen.Util.WindowInfo;
+-import com.aptitekk.TeamScreen.Util.WindowInfo.RECT;
+-import com.sun.jna.Native;
+-import com.sun.jna.platform.win32.WinDef.HWND;
+-import com.sun.jna.win32.StdCallLibrary;
+-import com.sun.jna.win32.W32APIOptions;
+-
+-public class WindowsNative extends WindowManager {
+-
+-	@Override
+-	public List<WindowInfo> getWindows() {
+-		final List<WindowInfo> inflList = new ArrayList<WindowInfo>();
+-		final List<Integer> order = new ArrayList<Integer>();
+-		int top = User32.instance.GetTopWindow(0);
+-		while (top!=0) {
+-			order.add(top);
+-			top = User32.instance.GetWindow(top, User32.GW_HWNDNEXT);
+-		}
+-		User32.instance.EnumWindows(new WndEnumProc()
+-		{
+-			@Override
+-			public boolean callback(int hWnd, int lParam)
+-			{
+-				if (User32.instance.IsWindowVisible(hWnd)) {
+-					RECT r = new RECT();
+-					User32.instance.GetWindowRect(hWnd, r);
+-					if (r.left>-32000) {     // minimized
+-						byte[] buffer = new byte[1024];
+-						User32.instance.GetWindowTextA(hWnd, buffer, buffer.length);
+-						String title = Native.toString(buffer);
+-						inflList.add(new WindowInfo(hWnd, r, title));
+-					}
+-				}
+-				return true;
+-			}
+-		}, 0);
+-		Collections.sort(inflList, new Comparator<WindowInfo>()
+-				{
+-			@Override
+-			public int compare(WindowInfo o1, WindowInfo o2) {
+-				return order.indexOf(o1.hwnd)-order.indexOf(o2.hwnd);
+-			}
+-				});
+-		return inflList;
+-	}
+-	
+-	@Override
+-	public WindowInfo getTopWindow() {
+-		final List<WindowInfo> topWindowList = new ArrayList<WindowInfo>();
+-		int top = User32.instance.GetTopWindow(0);
+-		User32.instance.EnumWindows(new WndEnumProc()
+-		{
+-			@Override
+-			public boolean callback(int hWnd, int lParam)
+-			{
+-				if (User32.instance.IsWindowVisible(hWnd)) {
+-					RECT r = new RECT();
+-					User32.instance.GetWindowRect(hWnd, r);
+-					if (r.left>-32000) {     // minimized
+-						byte[] buffer = new byte[1024];
+-						User32.instance.GetWindowTextA(hWnd, buffer, buffer.length);
+-						String title = Native.toString(buffer);
+-						topWindowList.add(new WindowInfo(hWnd, r, title));
+-					}
+-				}
+-				return true;
+-			}
+-		}, 0);
+-		return topWindowList.get(0);
+-	}
+-	
+-	public WindowInfo getWindowbyTitle(String windowTitle) throws WindowNotFoundException {
+-		List<WindowInfo> windows = getWindows();
+-		for(WindowInfo window : windows) {
+-			if(window.getTitle().equals(windowTitle)) {
+-				return window;
+-			}
+-		}
+-		throw new WindowNotFoundException("", windowTitle);
+-	}
+-
+-	private int[] getRect(int hwnd) throws WindowNotFoundException,
+-	GetWindowRectException {
+-		RECT r = new RECT();
+-		int result = User32.instance.GetWindowRect(hwnd, r);
+-		if(result == 0) {
+-			throw new GetWindowRectException("" + hwnd);
+-		}
+-		return r.asArray();
+-	}
+-
+-	public int[] getWindowRect(int hwnd) {
+-		int[] rect;
+-		try {
+-			rect = getRect(hwnd);
+-			return rect;
+-		} catch (WindowNotFoundException e) {
+-			e.printStackTrace();
+-		} catch (GetWindowRectException e) {
+-			e.printStackTrace();
+-		}      
+-		return null;
+-	}
+-	
+-	@Override
+-	public synchronized WindowInfo updateWindow(WindowInfo w) throws WindowNotFoundException {
+-		List<WindowInfo> windows = getWindows();
+-		for(WindowInfo window : windows) {
+-			if(window.hwnd == w.hwnd) {
+-				return window;
+-			}
+-		}
+-		throw new WindowNotFoundException("", w.getTitle());
+-	}
+-	
+-	static interface WndEnumProc extends StdCallLibrary.StdCallCallback {
+-		boolean callback (int hWnd, int lParam);
+-	}
+-
+-	static interface User32 extends StdCallLibrary
+-	{
+-		final User32 instance = (User32) Native.loadLibrary ("user32", User32.class);
+-		User32 INSTANCE = (User32) Native.loadLibrary("user32", User32.class,
+-	               W32APIOptions.DEFAULT_OPTIONS);
+-		boolean EnumWindows (WndEnumProc wndenumproc, int lParam);
+-		boolean IsWindowVisible(int hWnd);
+-		int GetWindowRect(int hWnd, RECT r);
+-		void GetWindowTextA(int hWnd, byte[] buffer, int buflen);
+-		int GetTopWindow(int hWnd);
+-		int GetWindow(int hWnd, int flag);
+-		boolean SetForegroundWindow(int hWnd);
+-		
+-		HWND FindWindow(String lpClassName, String lpWindowName);
+-	    int GetWindowRect(HWND handle, int[] rect);
+-	    
+-		final int GW_HWNDNEXT = 2;
+-	}
+-
+-	@Override
+-	public void bringWindowToFront(WindowInfo w) {
+-		User32.instance.SetForegroundWindow(w.hwnd);
+-	}
+-	
+-	
+-	
+-	
+-
+-}
++package com.aptitekk.TeamScreen.JNA;
++
++import java.awt.Rectangle;
++import java.awt.image.BufferedImage;
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.Comparator;
++import java.util.List;
++
++import com.aptitekk.TeamScreen.Util.WindowInfo;
++import com.aptitekk.TeamScreen.Util.WindowInfo.RECT;
++import com.sun.jna.Memory;
++import com.sun.jna.Native;
++import com.sun.jna.platform.win32.GDI32;
++import com.sun.jna.platform.win32.WinDef;
++import com.sun.jna.platform.win32.WinDef.DWORD;
++import com.sun.jna.platform.win32.WinDef.HBITMAP;
++import com.sun.jna.platform.win32.WinDef.HDC;
++import com.sun.jna.platform.win32.WinDef.HWND;
++import com.sun.jna.platform.win32.WinGDI;
++import com.sun.jna.platform.win32.WinGDI.BITMAPINFO;
++import com.sun.jna.platform.win32.WinNT.HANDLE;
++import com.sun.jna.win32.StdCallLibrary;
++import com.sun.jna.win32.W32APIOptions;
++
++public class WindowsNative extends WindowManager {
++
++	@Override
++	public List<WindowInfo> getWindows() {
++		final List<WindowInfo> inflList = new ArrayList<WindowInfo>();
++		final List<Integer> order = new ArrayList<Integer>();
++		int top = User32.instance.GetTopWindow(0);
++		while (top != 0) {
++			order.add(top);
++			top = User32.instance.GetWindow(top, User32.GW_HWNDNEXT);
++		}
++		User32.instance.EnumWindows(new WndEnumProc() {
++			@Override
++			public boolean callback(int hWnd, int lParam) {
++				if (User32.instance.IsWindowVisible(hWnd)) {
++					RECT r = new RECT();
++					User32.instance.GetWindowRect(hWnd, r);
++					if (r.left > -32000) { // minimized
++						byte[] buffer = new byte[1024];
++						User32.instance.GetWindowTextA(hWnd, buffer,
++								buffer.length);
++						String title = Native.toString(buffer);
++						inflList.add(new WindowInfo(hWnd, title));
++					}
++				}
++				return true;
++			}
++		}, 0);
++		Collections.sort(inflList, new Comparator<WindowInfo>() {
++			@Override
++			public int compare(WindowInfo o1, WindowInfo o2) {
++				return order.indexOf(o1.hwnd) - order.indexOf(o2.hwnd);
++			}
++		});
++		return inflList;
++	}
++
++	@Override
++	public WindowInfo getTopWindow() {
++		final List<WindowInfo> topWindowList = new ArrayList<WindowInfo>();
++		int top = User32.instance.GetTopWindow(0);
++		User32.instance.EnumWindows(new WndEnumProc() {
++			@Override
++			public boolean callback(int hWnd, int lParam) {
++				if (User32.instance.IsWindowVisible(hWnd)) {
++					RECT r = new RECT();
++					User32.instance.GetWindowRect(hWnd, r);
++					if (r.left > -32000) { // minimized
++						byte[] buffer = new byte[1024];
++						User32.instance.GetWindowTextA(hWnd, buffer,
++								buffer.length);
++						String title = Native.toString(buffer);
++						topWindowList.add(new WindowInfo(hWnd, title));
++					}
++				}
++				return true;
++			}
++		}, 0);
++		return topWindowList.get(0);
++	}
++
++	public WindowInfo getWindowbyTitle(String windowTitle)
++			throws WindowNotFoundException {
++		List<WindowInfo> windows = getWindows();
++		for (WindowInfo window : windows) {
++			if (window.getTitle().equals(windowTitle)) {
++				return window;
++			}
++		}
++		throw new WindowNotFoundException("", windowTitle);
++	}
++
++	private int[] getRect(int hwnd) throws WindowNotFoundException,
++			GetWindowRectException {
++		RECT r = new RECT();
++		int result = User32.instance.GetWindowRect(hwnd, r);
++		if (result == 0) {
++			throw new GetWindowRectException("" + hwnd);
++		}
++		return r.asArray();
++	}
++
++	public int[] getWindowRect(int hwnd) {
++		int[] rect;
++		try {
++			rect = getRect(hwnd);
++			return rect;
++		} catch (WindowNotFoundException e) {
++			e.printStackTrace();
++		} catch (GetWindowRectException e) {
++			e.printStackTrace();
++		}
++		return null;
++	}
++	
++	public Rectangle getDisplayRectangle(int hwnd) {
++		WinDef.RECT bounds = new WinDef.RECT();
++		User32.instance.GetClientRect(hwnd, bounds);
++
++        int width = bounds.right - bounds.left;
++        int height = bounds.bottom - bounds.top;
++        
++        return new Rectangle(bounds.top, bounds.left, width, height);
++	}
++	
++	@Override
++	public BufferedImage captureWindow(WindowInfo w) {
++		int hwnd = w.hwnd;
++		
++		HDC hdcWindow = User32.instance.GetWindowDC(hwnd);
++        HDC hdcMemDC = GDI32.INSTANCE.CreateCompatibleDC(hdcWindow);
++		
++		WinDef.RECT bounds = new WinDef.RECT();
++		User32.instance.GetClientRect(hwnd, bounds);
++
++        int width = bounds.right - bounds.left;
++        int height = bounds.bottom - bounds.top;
++
++        HBITMAP hBitmap = GDI32.INSTANCE.CreateCompatibleBitmap(hdcWindow, width, height);
++
++        HANDLE hOld = GDI32.INSTANCE.SelectObject(hdcMemDC, hBitmap);
++        GDI32Extra.INSTANCE.BitBlt(hdcMemDC, 0, 0, width, height, hdcWindow, 0, 0, WinGDIExtra.SRCCOPY);
++
++        GDI32.INSTANCE.SelectObject(hdcMemDC, hOld);
++        GDI32.INSTANCE.DeleteDC(hdcMemDC);
++
++        BITMAPINFO bmi = new BITMAPINFO();
++        bmi.bmiHeader.biWidth = width;
++        bmi.bmiHeader.biHeight = -height;
++        bmi.bmiHeader.biPlanes = 1;
++        bmi.bmiHeader.biBitCount = 32;
++        bmi.bmiHeader.biCompression = WinGDI.BI_RGB;
++
++        Memory buffer = new Memory(width * height * 4);
++        GDI32.INSTANCE.GetDIBits(hdcWindow, hBitmap, 0, height, buffer, bmi, WinGDI.DIB_RGB_COLORS);
++
++        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
++        image.setRGB(0, 0, width, height, buffer.getIntArray(0, width * height), 0, width);
++
++        GDI32.INSTANCE.DeleteObject(hBitmap);
++        User32.instance.ReleaseDC(hwnd, hdcWindow);
++
++        return image;
++	}
++
++	@Override
++	public synchronized WindowInfo updateWindow(WindowInfo w)
++			throws WindowNotFoundException {
++		List<WindowInfo> windows = getWindows();
++		for (WindowInfo window : windows) {
++			if (window.hwnd == w.hwnd) {
++				return window;
++			}
++		}
++		throw new WindowNotFoundException("", w.getTitle());
++	}
++
++	static interface WndEnumProc extends StdCallLibrary.StdCallCallback {
++		boolean callback(int hWnd, int lParam);
++	}
++
++	static interface User32 extends StdCallLibrary {
++		final User32 instance = (User32) Native.loadLibrary("user32",
++				User32.class);
++		User32 INSTANCE = (User32) Native.loadLibrary("user32", User32.class,
++				W32APIOptions.DEFAULT_OPTIONS);
++
++		boolean EnumWindows(WndEnumProc wndenumproc, int lParam);
++
++		boolean IsWindowVisible(int hWnd);
++
++		int GetWindowRect(int hWnd, RECT r);
++
++		void GetWindowTextA(int hWnd, byte[] buffer, int buflen);
++
++		int GetTopWindow(int hWnd);
++
++		int GetWindow(int hWnd, int flag);
++
++		boolean SetForegroundWindow(int hWnd);
++
++		HWND FindWindow(String lpClassName, String lpWindowName);
++
++		int GetWindowRect(HWND handle, int[] rect);
++		
++		public HDC GetWindowDC(int hWnd);
++
++	    public boolean GetClientRect(int hWnd, WinDef.RECT rect);
++	    
++	    int ReleaseDC(int hWnd, HDC hdcWindow);
++	    
++		final int GW_HWNDNEXT = 2;
++	}
++
++	static interface WinGDIExtra extends WinGDI {
++		public DWORD SRCCOPY = new DWORD(0x00CC0020);
++	}
++
++	static interface GDI32Extra extends GDI32 {
++
++		GDI32Extra INSTANCE = (GDI32Extra) Native.loadLibrary("gdi32",
++				GDI32Extra.class, W32APIOptions.DEFAULT_OPTIONS);
++
++		public boolean BitBlt(HDC hObject, int nXDest, int nYDest, int nWidth,
++				int nHeight, HDC hObjectSource, int nXSrc, int nYSrc,
++				DWORD dwRop);
++
++	}
++
++	@Override
++	public void bringWindowToFront(WindowInfo w) {
++		User32.instance.SetForegroundWindow(w.hwnd);
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
+index 47a91ec..d40bcb3 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
+@@ -1,135 +1,145 @@
+-package com.aptitekk.TeamScreen.JNA;
+-
+-import java.util.ArrayList;
+-import java.util.List;
+-
+-import com.aptitekk.TeamScreen.JNA.X.X11Exception;
+-import com.aptitekk.TeamScreen.Util.WindowInfo;
+-import com.aptitekk.TeamScreen.Util.WindowInfo.RECT;
+-import com.sun.jna.Library;
+-import com.sun.jna.platform.unix.X11;
+-import com.sun.jna.platform.unix.X11.WindowByReference;
+-import com.sun.jna.platform.unix.X11.XWindowAttributes;
+-import com.sun.jna.ptr.IntByReference;
+-
+-public class X11Native extends WindowManager {
+-	
+-	private X.Display display = new X.Display();
+-
+-	@Override
+-	public List<WindowInfo> getWindows() {
+-		final List<WindowInfo> inflList = new ArrayList<WindowInfo>();
+-
+-		com.aptitekk.TeamScreen.JNA.X.Window[] windowList = null;
+-		try {
+-			windowList = display.getWindows();
+-		} catch (X11Exception e) {
+-			System.err.println("Could not retrieve windows");
+-			e.printStackTrace();
+-			return null;
+-		}
+-        
+-        for(X.Window win : windowList) {
+-        	inflList.add(getWindow(win));
+-        }
+-
+-        return inflList;
+-	}
+-	private WindowInfo getWindow(int hwnd) {
+-		return getWindow(new X.Window(display, hwnd));
+-	}
+-	private WindowInfo getWindow(X.Window window) {
+-		String wName = null;
+-		try {
+-			wName = window.getTitle();
+-		} catch (X11Exception e) {
+-			e.printStackTrace();
+-		}
+-		if(wName == null) {
+-			System.err.println("Window Title null!");
+-			return null;
+-		}
+-	    XWindowAttributes wInfo = new XWindowAttributes();
+-	    IntByReference x = null, y = null;
+-	    WindowByReference child = null;
+-    	int status = X11Ext.instance.XGetWindowAttributes(display.getX11Display(), window.getX11Window(), wInfo);
+-    	boolean status_= X11Ext.instance.XTranslateCoordinates(display.getX11Display(), window.getX11Window(),
+-    			display.getRootWindow().getX11Window(), 0, 0, x, y, child);
+-		WindowInfo.RECT rect = new WindowInfo.RECT();
+-		rect.top = y.getValue() - wInfo.y;
+-		rect.bottom = (y.getValue() - wInfo.y)+wInfo.height;
+-		rect.left = x.getValue() - wInfo.x;
+-		rect.right= (x.getValue() - wInfo.x)+wInfo.width;
+-		return new WindowInfo(window.getID(),
+-				rect,
+-				wName);
+-	}
+-	
+-	
+-	@Override
+-	public WindowInfo getTopWindow() {
+-		return getWindows().get(getWindows().size()-1);
+-	}
+-	
+-	public WindowInfo getWindowbyTitle(String windowTitle) throws WindowNotFoundException {
+-		List<WindowInfo> windows = getWindows();
+-		for(WindowInfo window : windows) {
+-			if(window.getTitle().equals(windowTitle)) {
+-				return window;
+-			}
+-		}
+-		throw new WindowNotFoundException("", windowTitle);
+-	}
+-
+-	private int[] getRect(int hwnd) throws WindowNotFoundException,
+-	GetWindowRectException {
+-		RECT r = new RECT();
+-		X11.XWindowAttributes windowAttrib = new XWindowAttributes();
+-		int result = X11Ext.instance.XGetWindowAttributes(X11Ext.x11Display, new X11.Window(hwnd), windowAttrib);
+-		if(result == 0) {
+-			throw new GetWindowRectException("" + hwnd);
+-		}
+-		r.top = windowAttrib.y;
+-		r.bottom = windowAttrib.y+windowAttrib.height;
+-		r.left = windowAttrib.x;
+-		r.right= windowAttrib.x+windowAttrib.width;
+-		return r.asArray();
+-	}
+-
+-	public int[] getWindowRect(int hwnd) {
+-		int[] rect;
+-		try {
+-			rect = getRect(hwnd);
+-			return rect;
+-		} catch (WindowNotFoundException e) {
+-			e.printStackTrace();
+-		} catch (GetWindowRectException e) {
+-			e.printStackTrace();
+-		}      
+-		return null;
+-	}
+-	
+-	@Override
+-	public synchronized WindowInfo updateWindow(WindowInfo w) throws WindowNotFoundException {
+-		List<WindowInfo> windows = getWindows();
+-		for(WindowInfo window : windows) {
+-			if(window.getTitle().equals(w.getTitle())) {
+-				return window;
+-			}
+-		}
+-		throw new WindowNotFoundException("", w.getTitle());
+-	}
+-	
+-	
+-	static interface X11Ext extends Library
+-	{
+-		final X11 instance = X11.INSTANCE;
+-		X11.Display x11Display = instance.XOpenDisplay(null);
+-	}
+-
+-
+-	@Override
+-	public void bringWindowToFront(WindowInfo w) throws WindowNotFoundException {
+-		//
+-	}
+-}
++package com.aptitekk.TeamScreen.JNA;
++
++import java.awt.Rectangle;
++import java.util.ArrayList;
++import java.util.List;
++
++import com.aptitekk.TeamScreen.JNA.X.X11Exception;
++import com.aptitekk.TeamScreen.Util.WindowInfo;
++import com.aptitekk.TeamScreen.Util.WindowInfo.RECT;
++import com.sun.jna.Library;
++import com.sun.jna.platform.unix.X11;
++import com.sun.jna.platform.unix.X11.WindowByReference;
++import com.sun.jna.platform.unix.X11.XWindowAttributes;
++import com.sun.jna.ptr.IntByReference;
++
++public class X11Native extends WindowManager {
++	
++	private X.Display display = new X.Display();
++
++	@Override
++	public List<WindowInfo> getWindows() {
++		final List<WindowInfo> inflList = new ArrayList<WindowInfo>();
++
++		com.aptitekk.TeamScreen.JNA.X.Window[] windowList = null;
++		try {
++			windowList = display.getWindows();
++		} catch (X11Exception e) {
++			System.err.println("Could not retrieve windows");
++			e.printStackTrace();
++			return null;
++		}
++        
++        for(X.Window win : windowList) {
++        	inflList.add(getWindow(win));
++        }
++
++        return inflList;
++	}
++	private WindowInfo getWindow(int hwnd) {
++		return getWindow(new X.Window(display, hwnd));
++	}
++	private WindowInfo getWindow(X.Window window) {
++		String wName = null;
++		try {
++			wName = window.getTitle();
++		} catch (X11Exception e) {
++			e.printStackTrace();
++		}
++		if(wName == null) {
++			System.err.println("Window Title null!");
++			return null;
++		}
++	    XWindowAttributes wInfo = new XWindowAttributes();
++	    IntByReference x = null, y = null;
++	    WindowByReference child = null;
++    	int status = X11Ext.instance.XGetWindowAttributes(display.getX11Display(), window.getX11Window(), wInfo);
++    	boolean status_= X11Ext.instance.XTranslateCoordinates(display.getX11Display(), window.getX11Window(),
++    			display.getRootWindow().getX11Window(), 0, 0, x, y, child);
++		WindowInfo.RECT rect = new WindowInfo.RECT();
++		rect.top = y.getValue() - wInfo.y;
++		rect.bottom = (y.getValue() - wInfo.y)+wInfo.height;
++		rect.left = x.getValue() - wInfo.x;
++		rect.right= (x.getValue() - wInfo.x)+wInfo.width;
++		return new WindowInfo(window.getID(),
++				wName);
++	}
++	
++	
++	@Override
++	public WindowInfo getTopWindow() {
++		return getWindows().get(getWindows().size()-1);
++	}
++	
++	public WindowInfo getWindowbyTitle(String windowTitle) throws WindowNotFoundException {
++		List<WindowInfo> windows = getWindows();
++		for(WindowInfo window : windows) {
++			if(window.getTitle().equals(windowTitle)) {
++				return window;
++			}
++		}
++		throw new WindowNotFoundException("", windowTitle);
++	}
++
++	private int[] getRect(int hwnd) throws WindowNotFoundException,
++	GetWindowRectException {
++		RECT r = new RECT();
++		X11.XWindowAttributes windowAttrib = new XWindowAttributes();
++		int result = X11Ext.instance.XGetWindowAttributes(X11Ext.x11Display, new X11.Window(hwnd), windowAttrib);
++		if(result == 0) {
++			throw new GetWindowRectException("" + hwnd);
++		}
++		r.top = windowAttrib.y;
++		r.bottom = windowAttrib.y+windowAttrib.height;
++		r.left = windowAttrib.x;
++		r.right= windowAttrib.x+windowAttrib.width;
++		return r.asArray();
++	}
++
++	public int[] getWindowRect(int hwnd) {
++		int[] rect;
++		try {
++			rect = getRect(hwnd);
++			return rect;
++		} catch (WindowNotFoundException e) {
++			e.printStackTrace();
++		} catch (GetWindowRectException e) {
++			e.printStackTrace();
++		}      
++		return null;
++	}
++	
++	@Override
++	public synchronized WindowInfo updateWindow(WindowInfo w) throws WindowNotFoundException {
++		List<WindowInfo> windows = getWindows();
++		for(WindowInfo window : windows) {
++			if(window.getTitle().equals(w.getTitle())) {
++				return window;
++			}
++		}
++		throw new WindowNotFoundException("", w.getTitle());
++	}
++	
++	
++	static interface X11Ext extends Library
++	{
++		final X11 instance = X11.INSTANCE;
++		X11.Display x11Display = instance.XOpenDisplay(null);
++	}
++
++
++	@Override
++	public void bringWindowToFront(WindowInfo w) throws WindowNotFoundException {
++		//
++	}
++	@Override
++	public Rectangle getDisplayRectangle(int hwnd) {
++		int[] rect = null;
++		try {
++			rect = getRect(hwnd);
++		} catch (WindowNotFoundException | GetWindowRectException e) {
++			e.printStackTrace();
++		}
++		return new Rectangle(rect[0], rect[1], rect[2], rect[3]);
++	}
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+index f3269d4..b1d7beb 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+@@ -1,89 +1,90 @@
+-package com.aptitekk.TeamScreen.Net;
+-
+-import java.io.FileNotFoundException;
+-import java.io.IOException;
+-import java.util.Arrays;
+-import java.util.List;
+-
+-import com.aptitekk.TeamScreen.TeamScreenDaemon;
+-import com.aptitekk.TeamScreen.Net.Broadcaster.TeamScreenBroadcastThread;
+-
+-/**
+- * Yay for self-explanatory names :D
+- *
+- * @author kevint.
+- *         Created Mar 15, 2014.
+- */
+-public class PacketProcessor {
+-	
+-	NetHandler master;
+-	
+-	public PacketProcessor(NetHandler nethandler) {
+-		this.master = nethandler;
+-	}
+-
+-	/**
+-	 * on Packet received event
+-	 *
+-	 * @return
+-	 */
+-	public String onPacketReceived(String packetReceived) {
+-		String[] packetSplit = packetReceived.split(NetHandler.PACKET_SEPARATOR_CONSTANT);
+-		//[0] is type of packet (request, close, etc), [1] is value
+-		
+-		
+-		if(packetSplit.length >= 2)
+-			if(packetSplit[0].equalsIgnoreCase("request")) {
+-				if(packetSplit[1].equalsIgnoreCase("accept")) {
+-					//start jrc server
+-					this.master.startNewJRCServer(TeamScreenDaemon.windowPushed);
+-					try {
+-						return buildPacket(new String[]{"connectToMe",
+-								TeamScreenBroadcastThread.getLanIP(),
+-								TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("Slot"),
+-								TeamScreenDaemon.windowPushed.getTitle()});
+-					} catch (Exception exception) {
+-						exception.printStackTrace();
+-						return null;
+-					}
+-				} else {
+-					System.err.println(packetSplit[1]);
+-					return null;
+-				}
+-			}  else if(packetSplit[0].equalsIgnoreCase("connectToMe")){
+-				List<String> slots = Arrays.asList(new String[]{"A","B","C","D","E","F"});
+-		        Integer[] ports = new Integer[]{4455, 4456, 4457, 4458, 4459, 4460};
+-		        int port = ports[slots.indexOf(packetSplit[2])];
+-				this.master.startNewJRCClient(packetSplit[1], port, packetSplit[3]);
+-				System.out.println("Starting client, terminating communicator thread.");
+-				return null;
+-			} else {
+-				System.out.println("Invalid packet header received. \"" + packetReceived + "\" len: "+packetSplit.length);
+-				return null;
+-			}
+-		else {
+-			if(packetReceived.equalsIgnoreCase("request")) {
+-				return buildPacket(new String[]{"request","accept"});
+-			}else {
+-				System.out.println("Invalid packet header received. \"" + packetReceived + "\" len: "+packetSplit.length);
+-				return null;
+-			}
+-		}
+-		
+-	}
+-	
+-	private String buildPacket(String[] args) {
+-		String finalPacket = "";
+-		int i = 0;
+-		for(String s : args) {
+-			i++;
+-			//if(i != args.length) {
+-				finalPacket = finalPacket + s + NetHandler.PACKET_SEPARATOR_CONSTANT;
+-			//} else {
+-				//finalPacket = finalPacket + s;
+-			//}
+-		}
+-		return finalPacket;
+-	}
+-
+-}
++package com.aptitekk.TeamScreen.Net;
++
++import java.io.FileNotFoundException;
++import java.io.IOException;
++import java.util.Arrays;
++import java.util.List;
++
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++import com.aptitekk.TeamScreen.Net.Broadcaster.TeamScreenBroadcastThread;
++
++/**
++ * Yay for self-explanatory names :D
++ *
++ * @author kevint.
++ *         Created Mar 15, 2014.
++ */
++public class PacketProcessor {
++	
++	NetHandler master;
++	
++	public PacketProcessor(NetHandler nethandler) {
++		this.master = nethandler;
++	}
++
++	/**
++	 * on Packet received event
++	 *
++	 * @return
++	 */
++	public String onPacketReceived(String packetReceived) {
++		String[] packetSplit = packetReceived.split(NetHandler.PACKET_SEPARATOR_CONSTANT);
++		//[0] is type of packet (request, close, etc), [1] is value
++		
++		
++		if(packetSplit.length >= 2)
++			if(packetSplit[0].equalsIgnoreCase("request")) {
++				if(packetSplit[1].equalsIgnoreCase("accept")) {
++					//start jrc server
++					this.master.startNewJRCServer(TeamScreenDaemon.windowPushed);
++					try {
++						return buildPacket(new String[]{"connectToMe",
++								TeamScreenBroadcastThread.getLanIP(),
++								TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("Slot"),
++								TeamScreenDaemon.windowPushed.getTitle()});
++					} catch (Exception exception) {
++						exception.printStackTrace();
++						return null;
++					}
++				} else {
++					System.err.println(packetSplit[1]);
++					return null;
++				}
++			}  else if(packetSplit[0].equalsIgnoreCase("connectToMe")){
++				List<String> slots = Arrays.asList(new String[]{"A","B","C","D","E","F"});
++		        Integer[] ports = new Integer[]{4455, 4456, 4457, 4458, 4459, 4460};
++		        int port = ports[slots.indexOf(packetSplit[2])];
++				this.master.startNewJRCClient(packetSplit[1], port, packetSplit[3]);
++				if(TeamScreenDaemon.getVerbose())
++					System.out.println("Starting client, terminating communicator thread.");
++				return null;
++			} else {
++				System.err.println("Invalid packet header received. \"" + packetReceived + "\" len: "+packetSplit.length);
++				return null;
++			}
++		else {
++			if(packetReceived.equalsIgnoreCase("request")) {
++				return buildPacket(new String[]{"request","accept"});
++			}else {
++				System.err.println("Invalid packet header received. \"" + packetReceived + "\" len: "+packetSplit.length);
++				return null;
++			}
++		}
++		
++	}
++	
++	private String buildPacket(String[] args) {
++		String finalPacket = "";
++		int i = 0;
++		for(String s : args) {
++			i++;
++			//if(i != args.length) {
++				finalPacket = finalPacket + s + NetHandler.PACKET_SEPARATOR_CONSTANT;
++			//} else {
++				//finalPacket = finalPacket + s;
++			//}
++		}
++		return finalPacket;
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+index b448f90..ad11fd1 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+@@ -1,169 +1,166 @@
+-package com.aptitekk.TeamScreen.Net.jrc;
+-
+-import java.awt.Frame;
+-import java.io.OutputStream;
+-import java.util.Arrays;
+-import java.util.List;
+-
+-import org.one.stone.soup.remote.control.server.ControlAdapter;
+-import org.one.stone.soup.screen.recorder.ScreenRecorderListener;
+-
+-import com.aptitekk.TeamScreen.TeamScreenDaemon;
+-import com.aptitekk.TeamScreen.Frames.JRCServerControlExtension;
+-import com.aptitekk.TeamScreen.Net.Broadcaster.TeamScreenBroadcastThread;
+-import com.aptitekk.TeamScreen.Net.jrc.Server.DynamicRemoteControlServer;
+-import com.aptitekk.TeamScreen.Net.jrc.Server.DynamicScreenRecorder;
+-import com.aptitekk.TeamScreen.Net.jrc.Server.WindowControlAdapter;
+-import com.aptitekk.TeamScreen.Net.jrc.Server.WindowScreenRecorder;
+-import com.aptitekk.TeamScreen.Util.WindowInfo;
+-import com.aptitekk.TeamScreen.Window.Util.WindowUtil;
+-import com.aptitekk.TeamScreen.Window.Util.WindowUtil.WindowNotFoundException;
+-
+-/**
+- * Java Dynamic Remote Control Server Application<br>
+- * Modified from the <i>RemoteControlServerApplication</i> class
+- *
+- * @author kevint, Nicholas Cross
+- *         Created Apr 6, 2014.
+- */
+-public class DynamicJRCServerApplication extends Thread {
+-	
+-	private static WindowInfo window;
+-	private DynamicRemoteControlServer server;
+-	private boolean serverRunning = false;
+-	private static boolean threadRunning = false;
+-	
+-	private static DynamicJRCServerApplication instance;
+-	
+-	private Thread windowUpdater;
+-	
+-	private WindowControlAdapter controlAdapter;
+-	private WindowScreenRecorder screenRecorder;
+-	
+-	private JRCServerControlExtension sideBar;
+-	
+-	public DynamicJRCServerApplication(WindowInfo w) {
+-		DynamicJRCServerApplication.window = w;
+-		instance = this;
+-	}
+-
+-	public Frame getRootFrame() {
+-		return null;
+-	}
+-
+-	public void disconnect() {
+-		stopServer();
+-		this.serverRunning = false;
+-	}
+-	
+-	@Override
+-	public void run() {
+-		DynamicJRCServerApplication.threadRunning = true;
+-		try {
+-			//System.out.println("Window hooks placed");
+-			this.windowUpdater = new Thread() {
+-				public void run() {
+-					while(threadRunning) {
+-						try {
+-							window = TeamScreenDaemon.getWindowManager().updateWindow(window);
+-							if(screenRecorder != null)
+-								screenRecorder.updateWindow(window);
+-							if(controlAdapter != null)
+-								controlAdapter.updateWindow(window);
+-							//TeamScreenDaemon.getWindowManager().bringWindowToFront(window);
+-						} catch (com.aptitekk.TeamScreen.JNA.WindowManager.WindowNotFoundException e) {
+-							//System.out.println("Window hooks removed");
+-							e.printStackTrace();
+-							break;
+-						}
+-					}
+-					instance.interrupt();
+-				}
+-			};
+-			this.windowUpdater.start();
+-			startServer();
+-		} catch (Exception exception) {
+-			TeamScreenDaemon.logger.severe("Could not start JRC server");
+-			exception.printStackTrace();
+-		}
+-	}
+-	
+-	@Override
+-	public void interrupt() {
+-		this.windowUpdater.interrupt();
+-		disconnect();
+-		super.interrupt();
+-	}
+-	
+-	public void startServer() throws Exception
+-	{
+-		if(this.serverRunning==true)
+-		{
+-			TeamScreenDaemon.logger.warning("[Warning] The server is already running");
+-			return;
+-		}
+-		
+-		initialiseServer();
+-	}
+-	
+-	public void stopServer()
+-	{
+-		if(this.serverRunning==false)
+-		{
+-			TeamScreenDaemon.logger.warning("[Warning] The server is not running");
+-			return;
+-		}
+-		this.serverRunning=false;
+-		this.server.stop();
+-		this.windowUpdater.interrupt();
+-		TeamScreenDaemon.logger.info("RCD Server Stopped");
+-	}
+-
+-	public void setRequester(String requester) {
+-		TeamScreenDaemon.logger.info("Connected: " + requester);
+-		
+-	}
+-
+-	public ControlAdapter getControlAdapter() {
+-		return this.controlAdapter;
+-	}
+-	
+-	private ControlAdapter createControlAdapter() {
+-		this.controlAdapter = new WindowControlAdapter(DynamicJRCServerApplication.window);
+-		return this.controlAdapter;
+-	}
+-
+-	public DynamicScreenRecorder getScreenRecorder(OutputStream outputStream,
+-			ScreenRecorderListener listener) {
+-		if(this.screenRecorder == null)
+-			this.screenRecorder = new WindowScreenRecorder(outputStream, listener, DynamicJRCServerApplication.window);
+-		return this.screenRecorder;
+-	}
+-	
+-	private void initialiseServer() throws Exception
+-	{
+-		createControlAdapter();
+-		
+-		String address = TeamScreenBroadcastThread.getLanIP();
+-		List<String> slots = Arrays.asList(new String[]{"A","B","C","D","E","F"});
+-        Integer[] ports = new Integer[]{4455, 4456, 4457, 4458, 4459, 4460};
+-        int port = ports[slots.indexOf(TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("Slot"))];
+-		
+-		this.server = new DynamicRemoteControlServer(this);
+-		this.server.setAutoAccept(true);
+-		this.server.start("Remote Control Server",address,port,2,1000);
+-		
+-		TeamScreenDaemon.logger.info("RCD Server Started on "+address+":"+port);
+-		this.serverRunning=true;
+-	}
+-	
+-	public boolean isServerRunning() {
+-		return this.serverRunning;
+-	}
+-
+-	public void updateWindowRect(WindowInfo info) {
+-		DynamicJRCServerApplication.window = info;
+-		this.controlAdapter.updateWindow(info);
+-	}
+-
+-}
++package com.aptitekk.TeamScreen.Net.jrc;
++
++import java.awt.Frame;
++import java.io.OutputStream;
++import java.util.Arrays;
++import java.util.List;
++
++import org.one.stone.soup.remote.control.server.ControlAdapter;
++import org.one.stone.soup.screen.recorder.ScreenRecorderListener;
++
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++import com.aptitekk.TeamScreen.Frames.JRCServerControlExtension;
++import com.aptitekk.TeamScreen.Net.Broadcaster.TeamScreenBroadcastThread;
++import com.aptitekk.TeamScreen.Net.jrc.Server.DynamicRemoteControlServer;
++import com.aptitekk.TeamScreen.Net.jrc.Server.DynamicWindowScreenRecorder;
++import com.aptitekk.TeamScreen.Net.jrc.Server.WindowControlAdapter;
++import com.aptitekk.TeamScreen.Util.WindowInfo;
++
++/**
++ * Java Dynamic Remote Control Server Application<br>
++ * Modified from the <i>RemoteControlServerApplication</i> class
++ *
++ * @author kevint, Nicholas Cross
++ *         Created Apr 6, 2014.
++ */
++public class DynamicJRCServerApplication extends Thread {
++	
++	private static WindowInfo window;
++	private DynamicRemoteControlServer server;
++	private boolean serverRunning = false;
++	private static boolean threadRunning = false;
++	
++	private static DynamicJRCServerApplication instance;
++	
++	private Thread windowUpdater;
++	
++	private WindowControlAdapter controlAdapter;
++	private DynamicWindowScreenRecorder screenRecorder;
++	
++	private JRCServerControlExtension sideBar;
++	
++	public DynamicJRCServerApplication(WindowInfo w) {
++		DynamicJRCServerApplication.window = w;
++		instance = this;
++	}
++
++	public Frame getRootFrame() {
++		return null;
++	}
++
++	public void disconnect() {
++		stopServer();
++		this.serverRunning = false;
++	}
++	
++	@Override
++	public void run() {
++		DynamicJRCServerApplication.threadRunning = true;
++		try {
++			//System.out.println("Window hooks placed");
++			this.windowUpdater = new Thread() {
++				public void run() {
++					while(threadRunning) {
++						try {
++							window = TeamScreenDaemon.getWindowManager().updateWindow(window);
++							if(screenRecorder != null)
++								screenRecorder.updateWindow(window);
++							if(controlAdapter != null)
++								controlAdapter.updateWindow(window);
++							//TeamScreenDaemon.getWindowManager().bringWindowToFront(window);
++						} catch (com.aptitekk.TeamScreen.JNA.WindowManager.WindowNotFoundException e) {
++							//System.out.println("Window hooks removed");
++							e.printStackTrace();
++							break;
++						}
++					}
++					instance.interrupt();
++				}
++			};
++			this.windowUpdater.start();
++			startServer();
++		} catch (Exception exception) {
++			TeamScreenDaemon.logger.severe("Could not start JRC server");
++			exception.printStackTrace();
++		}
++	}
++	
++	@Override
++	public void interrupt() {
++		this.windowUpdater.interrupt();
++		disconnect();
++		super.interrupt();
++	}
++	
++	public void startServer() throws Exception
++	{
++		if(this.serverRunning==true)
++		{
++			TeamScreenDaemon.logger.warning("[Warning] The server is already running");
++			return;
++		}
++		
++		initialiseServer();
++	}
++	
++	public void stopServer()
++	{
++		if(this.serverRunning==false)
++		{
++			TeamScreenDaemon.logger.warning("[Warning] The server is not running");
++			return;
++		}
++		this.serverRunning=false;
++		this.server.stop();
++		this.windowUpdater.interrupt();
++		TeamScreenDaemon.logger.info("RCD Server Stopped");
++	}
++
++	public void setRequester(String requester) {
++		TeamScreenDaemon.logger.info("Connected: " + requester);
++		
++	}
++
++	public ControlAdapter getControlAdapter() {
++		return this.controlAdapter;
++	}
++	
++	private ControlAdapter createControlAdapter() {
++		this.controlAdapter = new WindowControlAdapter(DynamicJRCServerApplication.window);
++		return this.controlAdapter;
++	}
++
++	public DynamicWindowScreenRecorder getScreenRecorder(OutputStream outputStream,
++			ScreenRecorderListener listener) {
++		if(this.screenRecorder == null)
++			this.screenRecorder = new DynamicWindowScreenRecorder(outputStream, listener, DynamicJRCServerApplication.window);
++		return this.screenRecorder;
++	}
++	
++	private void initialiseServer() throws Exception
++	{
++		createControlAdapter();
++		
++		String address = TeamScreenBroadcastThread.getLanIP();
++		List<String> slots = Arrays.asList(new String[]{"A","B","C","D","E","F"});
++        Integer[] ports = new Integer[]{4455, 4456, 4457, 4458, 4459, 4460};
++        int port = ports[slots.indexOf(TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("Slot"))];
++		
++		this.server = new DynamicRemoteControlServer(this);
++		this.server.setAutoAccept(true);
++		this.server.start("Remote Control Server",address,port,2,1000);
++		
++		TeamScreenDaemon.logger.info("RCD Server Started on "+address+":"+port);
++		this.serverRunning=true;
++	}
++	
++	public boolean isServerRunning() {
++		return this.serverRunning;
++	}
++
++	public void updateWindowRect(WindowInfo info) {
++		DynamicJRCServerApplication.window = info;
++		this.controlAdapter.updateWindow(info);
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicRemoteControlServer.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicRemoteControlServer.java
+index b76b324..380b075 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicRemoteControlServer.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicRemoteControlServer.java
+@@ -1,310 +1,310 @@
+-package com.aptitekk.TeamScreen.Net.jrc.Server;
+-
+-import java.io.IOException;
+-import java.io.InputStream;
+-import java.io.OutputStream;
+-import java.net.Socket;
+-
+-import javax.swing.JOptionPane;
+-
+-import org.one.stone.soup.io.Connection;
+-import org.one.stone.soup.net.SocketConnection;
+-import org.one.stone.soup.screen.recorder.ScreenRecorderListener;
+-import org.one.stone.soup.server.PlainServer;
+-import org.one.stone.soup.server.RouterThread;
+-import org.one.stone.soup.stringhelper.StringGenerator;
+-
+-import com.aptitekk.TeamScreen.Net.jrc.DynamicJRCServerApplication;
+-
+-
+-/**
+- * Allows the server to dynamically update the screen recording area <br>
+- * Modified from the original <i>RemoteControlServer</i>
+- * 
+- * @author kevint, Nicholas Cross
+- */
+-public class DynamicRemoteControlServer extends PlainServer implements ScreenRecorderListener {
+-	
+-	private String connectionId;
+-	private String key;
+-	private String requester;
+-	private boolean hasConnection = false;
+-	private boolean autoAccept = false;
+-	private boolean readyForFrame = false;
+-	
+-	private int framesInProgress = 0;
+-	
+-	private DynamicScreenRecorder screenRecorder;
+-	private DynamicJRCServerApplication owner;
+-	private DynamicControlConnection controlConnection;
+-		
+-	public DynamicRemoteControlServer(DynamicJRCServerApplication owner)
+-	{
+-		this.owner = owner;
+-	}
+-	
+-	public void setAutoAccept(boolean state)
+-	{
+-		autoAccept = state;
+-	}
+-	
+-	/* (non-Javadoc)
+-	 * @see wet.wired.server.Server#route(java.net.Socket, wet.wired.server.RouterThread)
+-	 */
+-	public void route(Socket socket, RouterThread routerThread) {
+-		
+-		try{
+-			SocketConnection connection = new SocketConnection( socket,socket.getInetAddress().getHostAddress() );
+-			route( connection,routerThread );
+-		}
+-		catch(Exception e)
+-		{
+-			e.printStackTrace();
+-		}
+-	}
+-
+-	public void route(Connection connection, RouterThread routerThread) {
+-		try{
+-					
+-			if(hasConnection)
+-			{
+-				System.out.println("Connection Requested for "+connection.getAlias());
+-
+-				if(connection.getAlias().equals(connectionId))
+-				{
+-					String testKey = readLine(connection.getInputStream());
+-					
+-					if(!testKey.toString().equals(key))
+-					{
+-						try
+-						{
+-							connection.close();
+-						} catch(Exception e){}
+-						return;
+-					}
+-					System.out.println("Request Key Passed");
+-					
+-					String connectionType = readLine(connection.getInputStream());
+-					
+-					if(routerThread!=null)
+-					{
+-						routerThread.stopTimer();
+-					}
+-					System.out.println("Connection Requested Type "+connectionType);
+-					
+-					openConnection( connectionType.toString(),connection,requester );
+-
+-					System.out.println("Connection created. Type "+connectionType);
+-				}
+-			}
+-			else
+-			{
+-				InputStream iStream = connection.getInputStream();
+-					
+-				requester = readLine(iStream);
+-				
+-				if( autoAccept==false && JOptionPane.showConfirmDialog(owner.getRootFrame(),"Accept Connection from "+requester)!=JOptionPane.OK_OPTION )
+-				{
+-					try
+-					{
+-						connection.close();
+-					} catch(Exception e){}
+-					return;
+-				}
+-				else
+-				{
+-					key = StringGenerator.generateUniqueId();
+-					connection.getOutputStream().write( (key+'\n').getBytes() );
+-					connection.getOutputStream().flush();
+-					
+-					owner.setRequester( requester );			
+-				}
+-	
+-				//int identifier = socket.getInputStream().read();
+-				hasConnection = true;
+-				connectionId = connection.getAlias();
+-				
+-				if(routerThread!=null)
+-				{
+-					routerThread.stopTimer();
+-				}
+-				
+-				screenRecorder = owner.getScreenRecorder(connection.getOutputStream(),this);
+-				
+-				//frameRecorded(); //wait for client frame request
+-				
+-				screenRecorder.startRecording();
+-
+-				System.out.println("Screen Recorder Started for "+connectionId);				
+-			}
+-		}
+-		catch(Exception e)
+-		{
+-		}
+-		finally
+-		{
+-		}
+-	}
+-	
+-	/* (non-Javadoc)
+-	 * @see wet.wired.server.Server#initialize()
+-	 */
+-	public void initialize() {	}
+-
+-	private void openConnection(String command,Connection connection,String requester)
+-	{
+-		if(command.equals("fullControl"))
+-		{
+-			try{
+-				openControlConnection(connection.getOutputStream(),connection.getInputStream(),requester,true);
+-			}
+-			catch(Exception e){}
+-		}
+-		else
+-		{
+-			try{
+-				openControlConnection(connection.getOutputStream(),connection.getInputStream(),requester,false);
+-			}
+-			catch(Exception e){}
+-		}
+-	}
+-	
+-/*	private void openConnection(String command,Socket socket,String requester)
+-	{
+-		if(command.equals("fullControl"))
+-		{
+-			try{
+-				openControlConnection(socket.getOutputStream(),socket.getInputStream(),requester,true);
+-			}
+-			catch(Exception e){}
+-		}
+-		else
+-		{
+-			try{
+-				openControlConnection(socket.getOutputStream(),socket.getInputStream(),requester,false);
+-			}
+-			catch(Exception e){}
+-		}
+-	}*/
+-	
+-	private void openControlConnection(OutputStream oStream,InputStream iStream,String requester,boolean fullControl)
+-	{
+-		if( autoAccept==false && fullControl==true)
+-		{
+-			if(JOptionPane.showConfirmDialog(owner.getRootFrame(),"Accept Control by "+requester)!=JOptionPane.OK_OPTION )
+-			{
+-				fullControl=false;
+-			}
+-		}
+-		try
+-		{
+-			controlConnection = new DynamicControlConnection(this,oStream,iStream,fullControl,owner.getControlAdapter());
+-			controlConnection.process();
+-		} catch(Exception e){}
+-	}
+-	
+-	public void stop()
+-	{
+-		super.stop();
+-		disconnect();
+-	}
+-	
+-	public void disconnect()
+-	{
+-		if(screenRecorder!=null)
+-		{
+-			screenRecorder.stopRecording();
+-		}
+-		screenRecorder = null;
+-
+-		setReadyForFrame();
+-		
+-		if(controlConnection!=null)
+-		{
+-			controlConnection.stop();
+-			controlConnection=null;
+-		}
+-					
+-		hasConnection=false;
+-		System.out.println("Disconnected");
+-
+-		owner.disconnect();
+-	}
+-	
+-	public void setReadyForFrame()
+-	{
+-		readyForFrame=true;
+-		framesInProgress--;
+-	}
+-
+-	public void sendKeyFrame()
+-	{
+-		screenRecorder.sendKeyFrame();
+-	}
+-	
+-	public void frameRecorded(boolean fullFrame) throws IOException
+-	{	
+-		int count=0;
+-		while( controlConnection==null && count<500)
+-		{
+-			try{ Thread.sleep(10); }catch(Exception e){}
+-			count++;
+-		}
+-		if(count==500)
+-		{
+-			throw new IOException( "Frame timeout" );
+-		}
+-		
+-		try{
+-			controlConnection.sendFrameMarker(fullFrame);
+-		}
+-		catch(Exception e)
+-		{
+-			e.printStackTrace();
+-			disconnect();
+-			return;
+-		}
+-		
+-		framesInProgress++;
+-		count=0;
+-		while(framesInProgress>2 && screenRecorder.isRecording() && count<500)
+-		{
+-			try{ Thread.sleep(10); }catch(Exception e){}
+-			count++;
+-		}
+-		if(count==500)
+-		{
+-			throw new IOException( "Frame timeout" );
+-		}
+-		
+-		readyForFrame=false;
+-	}
+-
+-	public void recordingStopped() {
+-		disconnect();
+-	}
+-
+-	public static String readLine(InputStream iStream) throws IOException
+-	{
+-		int in = iStream.read();
+-		StringBuffer buffer = new StringBuffer();
+-		while(in!=-1 && in!='\n' && buffer.length()<100)
+-		{
+-			if(in!=0) // keep alive byte
+-			{
+-				buffer.append((char)in);
+-			}
+-						
+-			in = iStream.read();
+-		}
+-		
+-		return buffer.toString();
+-	}
+-	
+-	public static void writeLine(String line,OutputStream outputStream) throws IOException
+-	{
+-		outputStream.write( (line+"\n").getBytes() );
+-		outputStream.flush();				
+-	}
+-
+-}
++package com.aptitekk.TeamScreen.Net.jrc.Server;
++
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.OutputStream;
++import java.net.Socket;
++
++import javax.swing.JOptionPane;
++
++import org.one.stone.soup.io.Connection;
++import org.one.stone.soup.net.SocketConnection;
++import org.one.stone.soup.screen.recorder.ScreenRecorderListener;
++import org.one.stone.soup.server.PlainServer;
++import org.one.stone.soup.server.RouterThread;
++import org.one.stone.soup.stringhelper.StringGenerator;
++
++import com.aptitekk.TeamScreen.Net.jrc.DynamicJRCServerApplication;
++
++
++/**
++ * Allows the server to dynamically update the screen recording area <br>
++ * Modified from the original <i>RemoteControlServer</i>
++ * 
++ * @author kevint, Nicholas Cross
++ */
++public class DynamicRemoteControlServer extends PlainServer implements ScreenRecorderListener {
++	
++	private String connectionId;
++	private String key;
++	private String requester;
++	private boolean hasConnection = false;
++	private boolean autoAccept = false;
++	private boolean readyForFrame = false;
++	
++	private int framesInProgress = 0;
++	
++	private DynamicWindowScreenRecorder screenRecorder;
++	private DynamicJRCServerApplication owner;
++	private DynamicControlConnection controlConnection;
++		
++	public DynamicRemoteControlServer(DynamicJRCServerApplication owner)
++	{
++		this.owner = owner;
++	}
++	
++	public void setAutoAccept(boolean state)
++	{
++		autoAccept = state;
++	}
++	
++	/* (non-Javadoc)
++	 * @see wet.wired.server.Server#route(java.net.Socket, wet.wired.server.RouterThread)
++	 */
++	public void route(Socket socket, RouterThread routerThread) {
++		
++		try{
++			SocketConnection connection = new SocketConnection( socket,socket.getInetAddress().getHostAddress() );
++			route( connection,routerThread );
++		}
++		catch(Exception e)
++		{
++			e.printStackTrace();
++		}
++	}
++
++	public void route(Connection connection, RouterThread routerThread) {
++		try{
++					
++			if(hasConnection)
++			{
++				System.out.println("Connection Requested for "+connection.getAlias());
++
++				if(connection.getAlias().equals(connectionId))
++				{
++					String testKey = readLine(connection.getInputStream());
++					
++					if(!testKey.toString().equals(key))
++					{
++						try
++						{
++							connection.close();
++						} catch(Exception e){}
++						return;
++					}
++					System.out.println("Request Key Passed");
++					
++					String connectionType = readLine(connection.getInputStream());
++					
++					if(routerThread!=null)
++					{
++						routerThread.stopTimer();
++					}
++					System.out.println("Connection Requested Type "+connectionType);
++					
++					openConnection( connectionType.toString(),connection,requester );
++
++					System.out.println("Connection created. Type "+connectionType);
++				}
++			}
++			else
++			{
++				InputStream iStream = connection.getInputStream();
++					
++				requester = readLine(iStream);
++				
++				if( autoAccept==false && JOptionPane.showConfirmDialog(owner.getRootFrame(),"Accept Connection from "+requester)!=JOptionPane.OK_OPTION )
++				{
++					try
++					{
++						connection.close();
++					} catch(Exception e){}
++					return;
++				}
++				else
++				{
++					key = StringGenerator.generateUniqueId();
++					connection.getOutputStream().write( (key+'\n').getBytes() );
++					connection.getOutputStream().flush();
++					
++					owner.setRequester( requester );			
++				}
++	
++				//int identifier = socket.getInputStream().read();
++				hasConnection = true;
++				connectionId = connection.getAlias();
++				
++				if(routerThread!=null)
++				{
++					routerThread.stopTimer();
++				}
++				
++				screenRecorder = owner.getScreenRecorder(connection.getOutputStream(),this);
++				
++				//frameRecorded(); //wait for client frame request
++				
++				screenRecorder.startRecording();
++
++				System.out.println("Screen Recorder Started for "+connectionId);				
++			}
++		}
++		catch(Exception e)
++		{
++		}
++		finally
++		{
++		}
++	}
++	
++	/* (non-Javadoc)
++	 * @see wet.wired.server.Server#initialize()
++	 */
++	public void initialize() {	}
++
++	private void openConnection(String command,Connection connection,String requester)
++	{
++		if(command.equals("fullControl"))
++		{
++			try{
++				openControlConnection(connection.getOutputStream(),connection.getInputStream(),requester,true);
++			}
++			catch(Exception e){}
++		}
++		else
++		{
++			try{
++				openControlConnection(connection.getOutputStream(),connection.getInputStream(),requester,false);
++			}
++			catch(Exception e){}
++		}
++	}
++	
++/*	private void openConnection(String command,Socket socket,String requester)
++	{
++		if(command.equals("fullControl"))
++		{
++			try{
++				openControlConnection(socket.getOutputStream(),socket.getInputStream(),requester,true);
++			}
++			catch(Exception e){}
++		}
++		else
++		{
++			try{
++				openControlConnection(socket.getOutputStream(),socket.getInputStream(),requester,false);
++			}
++			catch(Exception e){}
++		}
++	}*/
++	
++	private void openControlConnection(OutputStream oStream,InputStream iStream,String requester,boolean fullControl)
++	{
++		if( autoAccept==false && fullControl==true)
++		{
++			if(JOptionPane.showConfirmDialog(owner.getRootFrame(),"Accept Control by "+requester)!=JOptionPane.OK_OPTION )
++			{
++				fullControl=false;
++			}
++		}
++		try
++		{
++			controlConnection = new DynamicControlConnection(this,oStream,iStream,fullControl,owner.getControlAdapter());
++			controlConnection.process();
++		} catch(Exception e){}
++	}
++	
++	public void stop()
++	{
++		super.stop();
++		disconnect();
++	}
++	
++	public void disconnect()
++	{
++		if(screenRecorder!=null)
++		{
++			screenRecorder.stopRecording();
++		}
++		screenRecorder = null;
++
++		setReadyForFrame();
++		
++		if(controlConnection!=null)
++		{
++			controlConnection.stop();
++			controlConnection=null;
++		}
++					
++		hasConnection=false;
++		System.out.println("Disconnected");
++
++		owner.disconnect();
++	}
++	
++	public void setReadyForFrame()
++	{
++		readyForFrame=true;
++		framesInProgress--;
++	}
++
++	public void sendKeyFrame()
++	{
++		screenRecorder.sendKeyFrame();
++	}
++	
++	public void frameRecorded(boolean fullFrame) throws IOException
++	{	
++		int count=0;
++		while( controlConnection==null && count<500)
++		{
++			try{ Thread.sleep(10); }catch(Exception e){}
++			count++;
++		}
++		if(count==500)
++		{
++			throw new IOException( "Frame timeout" );
++		}
++		
++		try{
++			controlConnection.sendFrameMarker(fullFrame);
++		}
++		catch(Exception e)
++		{
++			e.printStackTrace();
++			disconnect();
++			return;
++		}
++		
++		framesInProgress++;
++		count=0;
++		while(framesInProgress>2 && screenRecorder.isRecording() && count<500)
++		{
++			try{ Thread.sleep(10); }catch(Exception e){}
++			count++;
++		}
++		if(count==500)
++		{
++			throw new IOException( "Frame timeout" );
++		}
++		
++		readyForFrame=false;
++	}
++
++	public void recordingStopped() {
++		disconnect();
++	}
++
++	public static String readLine(InputStream iStream) throws IOException
++	{
++		int in = iStream.read();
++		StringBuffer buffer = new StringBuffer();
++		while(in!=-1 && in!='\n' && buffer.length()<100)
++		{
++			if(in!=0) // keep alive byte
++			{
++				buffer.append((char)in);
++			}
++						
++			in = iStream.read();
++		}
++		
++		return buffer.toString();
++	}
++	
++	public static void writeLine(String line,OutputStream outputStream) throws IOException
++	{
++		outputStream.write( (line+"\n").getBytes() );
++		outputStream.flush();				
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicScreenRecorder.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicScreenRecorder.java
+deleted file mode 100644
+index 0b87384..0000000
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicScreenRecorder.java
++++ /dev/null
+@@ -1,240 +0,0 @@
+-package com.aptitekk.TeamScreen.Net.jrc.Server;
+-
+-import java.awt.Rectangle;
+-import java.awt.image.BufferedImage;
+-import java.io.IOException;
+-import java.io.OutputStream;
+-
+-import org.one.stone.soup.screen.recorder.FrameCompressor;
+-import org.one.stone.soup.screen.recorder.ScreenRecorderListener;
+-import org.one.stone.soup.util.Queue;
+-
+-/**
+- * This special type of Screen recorder makes it so we can update the screen area
+- * with a special server<br>
+- * Modified originally from the <i>ScreenRecorder</i> class
+- * 
+- * @author kevint, Nicholas Cross
+- */
+-public abstract class DynamicScreenRecorder implements Runnable {
+-	
+-	private Rectangle recordArea;
+-	
+-	private int frameSize;
+-	private int[] rawData;
+-	
+-	private OutputStream oStream;
+-	
+-	private boolean recording = false;
+-	private boolean running = false;
+-
+-	private long startTime;
+-	private long frameTime;
+-	private boolean reset;
+-	
+-	private ScreenRecorderListener listener;
+-	
+-	public abstract BufferedImage captureScreen(Rectangle recordArea);
+-	public abstract Rectangle initialiseScreenCapture();
+-	public abstract Rectangle updateRecordingArea();
+-
+-	private class DataPack
+-	{
+-		public DataPack(int[] newData,long frameTime)
+-		{
+-			this.newData = newData;
+-			this.frameTime = frameTime;
+-		}
+-		public long frameTime;
+-		public int[] newData;
+-	}
+-	
+-	private class StreamPacker implements Runnable
+-	{	
+-		private Queue queue = new Queue();
+-		private FrameCompressor compressor;
+-		
+-		public StreamPacker( OutputStream oStream,int frameSize )
+-		{
+-			compressor = new FrameCompressor( oStream,frameSize );
+-			
+-			new Thread(this,"Stream Packer").start();
+-		}
+-		
+-		public void packToStream( DataPack pack )
+-		{
+-			while(queue.size()>2)
+-			{
+-				try{ Thread.sleep(10); }catch(Exception e){}
+-			}
+-			queue.post( pack );
+-		}
+-		
+-		public void run()
+-		{
+-			while(recording)
+-			{
+-				while( queue.isEmpty()==false )
+-				{
+-					DataPack pack = (DataPack)queue.get();
+-					try{
+-						compressor.pack( pack.newData,pack.frameTime,reset );
+-						
+-						if(reset==true)
+-						{
+-							reset=false;
+-						}
+-					}
+-					catch(Exception e)
+-					{
+-						e.printStackTrace();
+-						try{ oStream.close(); }catch(Exception e2){}
+-						return;
+-					}
+-				}
+-				while(queue.isEmpty()==true)
+-				{
+-					try{Thread.sleep(50);}catch(Exception e){}
+-				}
+-			}
+-		}
+-	}
+-	private StreamPacker streamPacker;
+-	
+-	public DynamicScreenRecorder(OutputStream oStream,ScreenRecorderListener listener)
+-	{
+-		this.listener = listener;
+-		this.oStream = oStream;
+-	}
+-
+-	public void triggerRecordingStop()
+-	{
+-		recording = false;
+-	}
+-	
+-	public synchronized void run()
+-	{
+-		startTime = System.currentTimeMillis();
+-		
+-		recording = true;
+-		running = true;
+-		long lastFrameTime=0;
+-		long time = 0;
+-		
+-		frameSize = recordArea.width*recordArea.height;
+-		streamPacker = new StreamPacker( oStream,frameSize );
+-		
+-		while( recording )
+-		{
+-			recordArea = updateRecordingArea();
+-			time = System.currentTimeMillis();
+-			while(time-lastFrameTime<200)
+-			{
+-				try{Thread.sleep(50);}catch(Exception e){}
+-				time = System.currentTimeMillis();	
+-			}
+-			lastFrameTime = time;
+-			
+-			try{
+-				recordFrame();
+-			}
+-			catch(Exception e)
+-			{
+-				e.printStackTrace();
+-				try{ oStream.close(); }catch(Exception e2){}
+-				break;
+-			}
+-		}
+-		
+-		running = false;
+-		recording = false;
+-		
+-		listener.recordingStopped();
+-	}
+-	
+-	public void recordFrame() throws IOException
+-	{
+-		//long t1 = System.currentTimeMillis();
+-		BufferedImage bImage = captureScreen(recordArea);
+-		frameTime = System.currentTimeMillis()-startTime;
+-		//long t2 = System.currentTimeMillis();
+-
+-		rawData = new int[frameSize];
+-
+-		bImage.getRGB(0,0,recordArea.width,recordArea.height,rawData,0,recordArea.width);
+-		//long t3 = System.currentTimeMillis();
+-		
+-		//packToStream(rawData,newRawData);
+-		streamPacker.packToStream( new DataPack(rawData,frameTime) );
+-		//long t4 = System.currentTimeMillis();
+-		
+-		/*System.out.println("Times");
+-		System.out.println("  capture time:"+(t2-t1));
+-		System.out.println("  data grab time:"+(t3-t2));
+-		System.out.println("  pack time:"+(t4-t3));*/
+-		
+-		listener.frameRecorded(false);
+-	}
+-
+-	public void startRecording()
+-	{		
+-		recordArea = initialiseScreenCapture();
+-		
+-		if(recordArea==null)
+-		{
+-			return;
+-		}
+-		try{
+-			oStream.write( (recordArea.width & 0x0000FF00) >>>8 );
+-			oStream.write( (recordArea.width & 0x000000FF) );
+-		
+-			oStream.write( (recordArea.height & 0x0000FF00) >>>8 );
+-			oStream.write( (recordArea.height & 0x000000FF) );
+-		}
+-		catch(Exception e)
+-		{
+-			e.printStackTrace();		
+-		}		
+-		
+-		new Thread(this,"Screen Recorder").start();
+-	}
+-
+-	public void stopRecording()
+-	{
+-		triggerRecordingStop();
+-		
+-		int count = 0;
+-		while(running == true && count<10)
+-		{
+-			try{ Thread.sleep(100);
+-			}catch(Exception e){}
+-			count++;
+-		}
+-		
+-		try{
+-			oStream.flush();
+-			oStream.close();
+-		}
+-		catch(Exception e){
+-			e.printStackTrace();
+-		}
+-	}
+-	public Rectangle getRecordArea() {
+-		return recordArea;
+-	}
+-	
+-	public boolean isRecording()
+-	{
+-		return recording;
+-	}
+-	
+-	public void sendKeyFrame()
+-	{
+-		reset=true;
+-	}
+-
+-	public int getFrameSize() {
+-		return frameSize;
+-	}
+-
+-}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicWindowScreenRecorder.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicWindowScreenRecorder.java
+new file mode 100644
+index 0000000..2f7cc94
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicWindowScreenRecorder.java
+@@ -0,0 +1,333 @@
++package com.aptitekk.TeamScreen.Net.jrc.Server;
++
++import java.awt.AWTException;
++import java.awt.Color;
++import java.awt.Graphics2D;
++import java.awt.MouseInfo;
++import java.awt.Point;
++import java.awt.Polygon;
++import java.awt.Rectangle;
++import java.awt.image.BufferedImage;
++import java.io.File;
++import java.io.IOException;
++import java.io.OutputStream;
++
++import javax.imageio.ImageIO;
++
++import org.one.stone.soup.screen.recorder.FrameCompressor;
++import org.one.stone.soup.screen.recorder.ScreenRecorderListener;
++import org.one.stone.soup.util.Queue;
++
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++import com.aptitekk.TeamScreen.Util.WindowInfo;
++
++/**
++ * This special type of Screen recorder makes it so we can update the screen
++ * area with a special server<br>
++ * Modified originally from the <i>ScreenRecorder</i> class
++ * 
++ * @author kevint, Nicholas Cross
++ */
++public class DynamicWindowScreenRecorder implements Runnable {
++
++	private Rectangle recordArea;
++
++	private int frameSize;
++	private int[] rawData;
++
++	private OutputStream oStream;
++
++	private boolean recording = false;
++	private boolean running = false;
++
++	private long startTime;
++	private long frameTime;
++	private boolean reset;
++
++	private ScreenRecorderListener listener;
++	private WindowInfo window;
++
++	private class DataPack {
++		public DataPack(int[] newData, long frameTime) {
++			this.newData = newData;
++			this.frameTime = frameTime;
++		}
++
++		public long frameTime;
++		public int[] newData;
++	}
++
++	private class StreamPacker implements Runnable {
++		private Queue queue = new Queue();
++		private FrameCompressor compressor;
++
++		public StreamPacker(OutputStream oStream, int frameSize) {
++			compressor = new FrameCompressor(oStream, frameSize);
++
++			new Thread(this, "Stream Packer").start();
++		}
++
++		public void packToStream(DataPack pack) {
++			while (queue.size() > 2) {
++				try {
++					Thread.sleep(10);
++				} catch (Exception e) {
++				}
++			}
++			queue.post(pack);
++		}
++
++		public void run() {
++			while (recording) {
++				while (queue.isEmpty() == false) {
++					DataPack pack = (DataPack) queue.get();
++					try {
++						compressor.pack(pack.newData, pack.frameTime, reset);
++
++						if (reset == true) {
++							reset = false;
++						}
++					} catch (ArrayIndexOutOfBoundsException e) {
++						resize();
++					} catch (Exception e) {
++						e.printStackTrace();
++						try {
++							oStream.close();
++						} catch (Exception e2) {
++						}
++						return;
++					}
++				}
++				while (queue.isEmpty() == true) {
++					try {
++						Thread.sleep(50);
++					} catch (Exception e) {
++					}
++				}
++			}
++		}
++	}
++
++	private StreamPacker streamPacker;
++
++	public DynamicWindowScreenRecorder(OutputStream oStream,
++			ScreenRecorderListener listener, WindowInfo window) {
++		this.listener = listener;
++		this.oStream = oStream;
++		this.window = window;
++	}
++
++	public void triggerRecordingStop() {
++		recording = false;
++	}
++
++	public synchronized void run() {
++		startTime = System.currentTimeMillis();
++
++		recording = true;
++		running = true;
++		long lastFrameTime = 0;
++		long time = 0;
++
++		BufferedImage initCapture = captureWindow();
++		adjustRecordArea(initCapture);
++
++		frameSize = recordArea.width * recordArea.height;
++
++		streamPacker = new StreamPacker(oStream, frameSize);
++
++		while (recording) {
++			// System.out.println("recordArea: " + recordArea);
++			time = System.currentTimeMillis();
++			while (time - lastFrameTime < 200) {
++				try {
++					Thread.sleep(50);
++				} catch (Exception e) {
++				}
++				time = System.currentTimeMillis();
++			}
++			lastFrameTime = time;
++
++			try {
++				recordFrame();
++			} catch (Exception e) {
++				e.printStackTrace();
++				try {
++					oStream.close();
++				} catch (Exception e2) {
++				}
++				break;
++			}
++		}
++
++		running = false;
++		recording = false;
++
++		listener.recordingStopped();
++	}
++
++	private void adjustRecordArea(BufferedImage bImage) {
++		if ((bImage.getHeight() * bImage.getWidth()) != frameSize) {
++			resize();
++			System.out.println("Window size changed");
++		}
++	}
++
++	public void recordFrame() throws IOException {
++		// long t1 = System.currentTimeMillis();
++		BufferedImage bImage = captureWindow();
++		frameTime = System.currentTimeMillis() - startTime;
++		// long t2 = System.currentTimeMillis();
++
++		adjustRecordArea(bImage);
++
++		rawData = new int[frameSize];
++
++		try {
++			bImage.getRGB(0, 0, bImage.getWidth(), bImage.getHeight(), rawData,
++					0, bImage.getWidth());
++		} catch (ArrayIndexOutOfBoundsException e) {
++			resize();
++			rawData = new int[bImage.getWidth() * bImage.getHeight()];
++			bImage.getRGB(0, 0, bImage.getWidth(), bImage.getHeight(), rawData,
++					0, bImage.getWidth());
++		}
++		// long t3 = System.currentTimeMillis();
++
++		// packToStream(rawData,newRawData);
++		streamPacker.packToStream(new DataPack(rawData, frameTime));
++		// long t4 = System.currentTimeMillis();
++
++		/*
++		 * System.out.println("Times");
++		 * System.out.println("  capture time:"+(t2-t1));
++		 * System.out.println("  data grab time:"+(t3-t2));
++		 * System.out.println("  pack time:"+(t4-t3));
++		 */
++
++		listener.frameRecorded(false);
++	}
++
++	/*
++	 * public Rectangle initialiseScreenCapture() { Point topleft = new
++	 * Point(this.window.getRect()[0], this.window.getRect()[1]); Point
++	 * bottomright = new Point(this.window.getRect()[2],
++	 * this.window.getRect()[3]);
++	 * 
++	 * Rectangle windowRect = getWindowRect();
++	 * System.out.println("Created screen area: " +
++	 * String.format("(%d,%d)-(%d,%d)", topleft.x,
++	 * topleft.y,bottomright.x,bottomright.y)); return windowRect; }
++	 */
++
++	public BufferedImage captureWindow() {
++		Point mousePosition = MouseInfo.getPointerInfo().getLocation();
++		BufferedImage image = null;
++		try {
++			image = TeamScreenDaemon.getWindowManager().captureWindow(
++					this.window);
++			// if(TeamScreenDaemon.getVerbose())
++			// System.out.println("image width: " + image.getWidth() +
++			// " height: " + image.getHeight());
++			// File outputfile = new File("saved.png");
++			// ImageIO.write(image, "png", outputfile);
++		} catch (AWTException e) {
++			e.printStackTrace();
++		}
++
++		Polygon pointer = new Polygon(new int[] { 0, 16, 10, 8 }, new int[] {
++				0, 8, 10, 16 }, 4);
++		Polygon pointerShadow = new Polygon(new int[] { 6, 21, 16, 14 },
++				new int[] { 1, 9, 11, 17 }, 4);
++
++		Graphics2D grfx = image.createGraphics();
++		grfx.translate(mousePosition.x - this.window.getRelativeRectangle().x,
++				mousePosition.y - this.window.getRelativeRectangle().y);
++		grfx.setColor(new Color(100, 100, 100, 100));
++		grfx.fillPolygon(pointerShadow);
++		grfx.setColor(new Color(100, 100, 255, 200));
++		grfx.fillPolygon(pointer);
++		grfx.setColor(Color.black);
++		grfx.drawPolygon(pointer);
++		grfx.dispose();
++
++		return image;
++	}
++
++	public void resize() {
++		recordArea = this.window.getAbsRectangle();
++		frameSize = recordArea.width * recordArea.height;
++		reset = true;
++
++		try {
++			oStream.write((recordArea.width & 0x0000FF00) >>> 8);
++			oStream.write((recordArea.width & 0x000000FF));
++
++			oStream.write((recordArea.height & 0x0000FF00) >>> 8);
++			oStream.write((recordArea.height & 0x000000FF));
++		} catch (Exception e) {
++			e.printStackTrace();
++		}
++	}
++
++	public void startRecording() {
++		recordArea = this.window.getAbsRectangle();
++		frameSize = recordArea.width * recordArea.height;
++
++		if (recordArea == null) {
++			return;
++		}
++		try {
++			oStream.write((recordArea.width & 0x0000FF00) >>> 8);
++			oStream.write((recordArea.width & 0x000000FF));
++
++			oStream.write((recordArea.height & 0x0000FF00) >>> 8);
++			oStream.write((recordArea.height & 0x000000FF));
++		} catch (Exception e) {
++			e.printStackTrace();
++		}
++
++		new Thread(this, "Screen Recorder").start();
++	}
++
++	public void stopRecording() {
++		triggerRecordingStop();
++
++		int count = 0;
++		while (running == true && count < 10) {
++			try {
++				Thread.sleep(100);
++			} catch (Exception e) {
++			}
++			count++;
++		}
++
++		try {
++			oStream.flush();
++			oStream.close();
++		} catch (Exception e) {
++			e.printStackTrace();
++		}
++	}
++
++	public Rectangle getRecordArea() {
++		return recordArea;
++	}
++
++	public boolean isRecording() {
++		return recording;
++	}
++
++	public void sendKeyFrame() {
++		reset = true;
++	}
++
++	public void updateWindow(WindowInfo info) {
++		this.window = info;
++	}
++
++	public int getFrameSize() {
++		return frameSize;
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowControlAdapter.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowControlAdapter.java
+index 8fd7556..3ca7ad6 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowControlAdapter.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowControlAdapter.java
+@@ -1,68 +1,62 @@
+-package com.aptitekk.TeamScreen.Net.jrc.Server;
+-
+-import java.awt.Point;
+-import java.awt.Rectangle;
+-import java.awt.Robot;
+-
+-import org.one.stone.soup.remote.control.server.ControlAdapter;
+-
+-import com.aptitekk.TeamScreen.Util.WindowInfo;
+-
+-/**
+- * Controls commands for a specific window
+- *
+- * @author kevint.
+- *         Created Apr 7, 2014.
+- */
+-public class WindowControlAdapter implements ControlAdapter {
+-	
+-	private Robot robot;
+-	private WindowInfo window;
+-	
+-	public WindowControlAdapter(WindowInfo info)
+-	{
+-		this.window = info;
+-		try{
+-			this.robot = new Robot();
+-		}
+-		catch(Exception e)
+-		{
+-			e.printStackTrace();
+-		}
+-	}
+-	
+-	private Rectangle getWindowRect() {
+-		Point topleft = new Point(this.window.getRect()[0], this.window.getRect()[1]);
+-		Point bottomright = new Point(this.window.getRect()[2], this.window.getRect()[3]);
+-		return new Rectangle(topleft.x, topleft.y, bottomright.x - topleft.x, bottomright.y - topleft.y);
+-	}
+-	
+-	@Override
+-	public void keyPress(int code) {
+-		this.robot.keyPress(code);
+-	}
+-
+-	@Override
+-	public void keyRelease(int code) {
+-		this.robot.keyRelease(code);
+-	}
+-
+-	@Override
+-	public void mouseMove(int x, int y) {
+-		this.robot.mouseMove(getWindowRect().x+x,getWindowRect().y+y);
+-	}
+-
+-	@Override
+-	public void mousePress(int code) {
+-		this.robot.mousePress(code);
+-	}
+-
+-	@Override
+-	public void mouseRelease(int code) {
+-		this.robot.mouseRelease(code);
+-	}
+-	
+-	public void updateWindow(WindowInfo info) {
+-		this.window = info;
+-	}
+-}
++package com.aptitekk.TeamScreen.Net.jrc.Server;
++
++import java.awt.Point;
++import java.awt.Rectangle;
++import java.awt.Robot;
++
++import org.one.stone.soup.remote.control.server.ControlAdapter;
++
++import com.aptitekk.TeamScreen.Util.WindowInfo;
++
++/**
++ * Controls commands for a specific window
++ *
++ * @author kevint.
++ *         Created Apr 7, 2014.
++ */
++public class WindowControlAdapter implements ControlAdapter {
++	
++	private Robot robot;
++	private WindowInfo window;
++	
++	public WindowControlAdapter(WindowInfo info)
++	{
++		this.window = info;
++		try{
++			this.robot = new Robot();
++		}
++		catch(Exception e)
++		{
++			e.printStackTrace();
++		}
++	}
++	
++	@Override
++	public void keyPress(int code) {
++		this.robot.keyPress(code);
++	}
++
++	@Override
++	public void keyRelease(int code) {
++		this.robot.keyRelease(code);
++	}
++
++	@Override
++	public void mouseMove(int x, int y) {
++		this.robot.mouseMove(this.window.getRelativeRectangle().x+x,this.window.getRelativeRectangle().y+y);
++	}
++
++	@Override
++	public void mousePress(int code) {
++		this.robot.mousePress(code);
++	}
++
++	@Override
++	public void mouseRelease(int code) {
++		this.robot.mouseRelease(code);
++	}
++	
++	public void updateWindow(WindowInfo info) {
++		this.window = info;
++	}
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowScreenRecorder.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowScreenRecorder.java
+deleted file mode 100644
+index d3ed12c..0000000
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowScreenRecorder.java
++++ /dev/null
+@@ -1,90 +0,0 @@
+-package com.aptitekk.TeamScreen.Net.jrc.Server;
+-
+-import java.awt.AWTException;
+-import java.awt.Color;
+-import java.awt.Graphics2D;
+-import java.awt.MouseInfo;
+-import java.awt.Point;
+-import java.awt.Polygon;
+-import java.awt.Rectangle;
+-import java.awt.Robot;
+-import java.awt.image.BufferedImage;
+-import java.io.OutputStream;
+-
+-import org.one.stone.soup.screen.recorder.ScreenRecorderListener;
+-
+-import com.aptitekk.TeamScreen.Util.WindowInfo;
+-
+-public class WindowScreenRecorder extends DynamicScreenRecorder{
+-	
+-	private Robot robot;
+-	private WindowInfo window;
+-	
+-	public WindowScreenRecorder(OutputStream oStream,ScreenRecorderListener listener, WindowInfo window) {
+-		super(oStream, listener);
+-		this.window = window;
+-	}
+-	
+-	private Rectangle getWindowRect() {
+-		Point topleft = new Point(this.window.getRect()[0], this.window.getRect()[1]);
+-		Point bottomright = new Point(this.window.getRect()[2], this.window.getRect()[3]);
+-		return new Rectangle(topleft.x, topleft.y, bottomright.x - topleft.x, bottomright.y - topleft.y+20);
+-	}
+-	
+-	public void updateWindow(WindowInfo window) {
+-		this.window = window;
+-	}
+-	
+-	public Rectangle updateRecordingArea() {
+-		Point topleft = new Point(this.window.getRect()[0], this.window.getRect()[1]);
+-		Point bottomright = new Point(this.window.getRect()[2], this.window.getRect()[3]);
+-		try{
+-			this.robot = new Robot();
+-		}
+-		catch(AWTException awe)
+-		{
+-			awe.printStackTrace();
+-			return null;
+-		}
+-		Rectangle windowRect = getWindowRect();
+-		return windowRect;
+-	}
+-
+-	public Rectangle initialiseScreenCapture() {
+-		Point topleft = new Point(this.window.getRect()[0], this.window.getRect()[1]);
+-		Point bottomright = new Point(this.window.getRect()[2], this.window.getRect()[3]);
+-		try{
+-			this.robot = new Robot();
+-		}
+-		catch(AWTException awe)
+-		{
+-			awe.printStackTrace();
+-			return null;
+-		}
+-		Rectangle windowRect = getWindowRect();
+-		System.out.println("Created screen area: " + String.format("(%d,%d)-(%d,%d)",
+-				topleft.x, topleft.y,bottomright.x,bottomright.y));
+-		return windowRect;
+-	}
+-
+-	public BufferedImage captureScreen(Rectangle recordArea) {
+-		Point mousePosition = MouseInfo.getPointerInfo().getLocation();
+-		BufferedImage image = this.robot.createScreenCapture(recordArea);
+-		
+-		Polygon pointer = new Polygon(new int[]{0,16,10,8},new int[]{0,8,10,16},4);
+-		Polygon pointerShadow = new Polygon(new int[]{6,21,16,14},new int[]{1,9,11,17},4);
+-		
+-		Graphics2D grfx = image.createGraphics();
+-		grfx.translate(mousePosition.x-getWindowRect().x,mousePosition.y-getWindowRect().y);
+-		grfx.setColor( new Color(100,100,100,100) );
+-		grfx.fillPolygon( pointerShadow );
+-		grfx.setColor( new Color(100,100,255,200) );
+-		grfx.fillPolygon( pointer );
+-		grfx.setColor( Color.black );
+-		grfx.drawPolygon( pointer );
+-		grfx.dispose();
+-		
+-		return image;
+-	}
+-
+-}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/Properties/PropertiesHandler.java
+similarity index 96%
+rename from TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java
+rename to TeamScreen/src/com/aptitekk/TeamScreen/Properties/PropertiesHandler.java
+index 8e0e09d..f653a74 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Properties/PropertiesHandler.java
+@@ -1,4 +1,4 @@
+-package com.aptitekk.TeamScreen;
++package com.aptitekk.TeamScreen.Properties;
+ 
+ import java.io.File;
+ import java.io.FileInputStream;
+@@ -7,12 +7,14 @@ import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.util.Properties;
+ 
++import com.aptitekk.TeamScreen.FolderManager;
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
+ import com.melloware.jintellitype.JIntellitype;
+ 
+ /**
+  * Main class to handle properties' files
+  *
+- * @author kevint.
++ * @author Kevin Thorne.
+  *         Created Apr 3, 2014.
+  */
+ public class PropertiesHandler {
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index 52bcc85..deec50f 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -46,6 +46,7 @@ import com.aptitekk.TeamScreen.JNA.WindowManager;
+ import com.aptitekk.TeamScreen.JNA.WindowsNative;
+ import com.aptitekk.TeamScreen.JNA.X11Native;
+ import com.aptitekk.TeamScreen.Net.NetHandler;
++import com.aptitekk.TeamScreen.Properties.PropertiesHandler;
+ import com.aptitekk.TeamScreen.Util.Interceptor;
+ import com.aptitekk.TeamScreen.Util.LogFormat;
+ import com.aptitekk.TeamScreen.Util.NotImplementedException;
+@@ -57,10 +58,10 @@ import com.melloware.jintellitype.JIntellitypeException;
+ /**
+  * Main tray for TeamScreen, stays dormant until user action
+  *
+- * @author kevint.
+- *         Created Apr 3, 2014.
++ * @author Kevin Thorne. Created Apr 3, 2014.
+  */
+-public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterListener{
++public class TeamScreenDaemon implements KeyListener, HotkeyListener,
++		UpdaterListener {
+ 
+ 	public static TrayIcon trayIcon;
+ 
+@@ -82,7 +83,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 	public static WindowInfo windowPushed;
+ 
+ 	static WindowManager wManager;
+-	
++
+ 	static boolean verbose = false;
+ 
+ 	/**
+@@ -90,25 +91,24 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 	 *
+ 	 * @param args
+ 	 */
+-	public static void main(String[] args) 
+-	{
++	public static void main(String[] args) {
+ 		UIManager.put("ProgressBar.background", Color.WHITE);
+ 		UIManager.put("ProgressBar.foreground", new Color(0, 120, 255));
+ 		UIManager.put("ProgressBar.selectionBackground", Color.WHITE);
+ 		UIManager.put("ProgressBar.selectionForeground", Color.WHITE);
+ 		UIManager.put("ProgressBar.border", new EmptyBorder(5, 0, 5, 0));
+ 		UIManager
+-		.put("ProgressBar.font", new Font("SansSerif", Font.PLAIN, 12));
+-		
+-		if(args.length >= 2) {
+-			for(int i=0; i > args.length; i++) {
+-				if(args[i].equals("-v") || args[i].equals("--verbose")) {
++				.put("ProgressBar.font", new Font("SansSerif", Font.PLAIN, 12));
++
++		if (args.length >= 2) {
++			for (int i = 0; i > args.length; i++) {
++				if (args[i].equals("-v") || args[i].equals("--verbose")) {
+ 					verbose = true;
+ 				}
+ 			}
+ 		}
+-		
+-		//new LicensingHandler();
++
++		// new LicensingHandler();
+ 
+ 		new TeamScreenDaemon();
+ 	}
+@@ -117,8 +117,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 		instance = this;
+ 		logger.info("Starting TeamScreen...");
+ 
+-		try
+-		{
++		try {
+ 
+ 			properties = new PropertiesHandler();
+ 
+@@ -127,133 +126,153 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 			ConsoleHandler consoleHandler = new ConsoleHandler();
+ 			consoleHandler.setFormatter(formatter);
+ 			logger.addHandler(consoleHandler);
+-			if(verbose) {
+-				Interceptor inter = new Interceptor(System.out, logger, Interceptor.OUT);
+-				Interceptor interr = new Interceptor(System.err, logger, Interceptor.ERR);
++			if (verbose) {
++				Interceptor inter = new Interceptor(System.out, logger,
++						Interceptor.OUT);
++				Interceptor interr = new Interceptor(System.err, logger,
++						Interceptor.ERR);
+ 				System.setErr(interr);
+ 				System.setOut(inter);
+ 			}
+-			if(Boolean.valueOf(properties.getConfig().getProperty("Log"))) {
++			if (Boolean.valueOf(properties.getConfig().getProperty("Log"))) {
+ 				FileHandler fh;
+ 				try {
+-					logger.info("Opened log file at: " + FolderManager.getAbsDir() + "/TeamScreen.log");
+-					fh = new FileHandler(FolderManager.getAbsDir() + "/TeamScreen.log");
++					logger.info("Opened log file at: "
++							+ FolderManager.getAbsDir() + "/TeamScreen.log");
++					fh = new FileHandler(FolderManager.getAbsDir()
++							+ "/TeamScreen.log");
+ 					fh.setFormatter(formatter);
+ 					logger.addHandler(fh);
+ 				} catch (Exception exception) {
+-					logger.severe("Could not create log file, not storing logs. Caused by: " + exception.getCause());
++					logger.severe("Could not create log file, not storing logs. Caused by: "
++							+ exception.getCause());
+ 				}
+ 			}
+-			//register window managers and hotkey managers
++			// register window managers and hotkey managers
++
++			if (FolderManager.isWindows()) {
++				wManager = new WindowsNative();
++				logger.info("OS: Windows");
+ 
+-			if(FolderManager.isWindows()) {
+-				wManager = new WindowsNative(); logger.info("Windows Detected");
+-				
+-				//Init hotkeys
++				// Init hotkeys
+ 				JIntellitype.getInstance();
+-				//JIntellitype.getInstance().registerHotKey(1, Integer.valueOf(properties.getConfig().getProperty("KeyStroke")).intValue()
+-				//		, Integer.valueOf(properties.getConfig().getProperty("KeyStrokeEnd")).intValue());
+-				JIntellitype.getInstance().registerHotKey(1, JIntellitype.MOD_CONTROL + JIntellitype.MOD_SHIFT, (int)'1');
++				// JIntellitype.getInstance().registerHotKey(1,
++				// Integer.valueOf(properties.getConfig().getProperty("KeyStroke")).intValue()
++				// ,
++				// Integer.valueOf(properties.getConfig().getProperty("KeyStrokeEnd")).intValue());
++				JIntellitype.getInstance().registerHotKey(1,
++						JIntellitype.MOD_CONTROL + JIntellitype.MOD_ALT,
++						(int) '1');
+ 				JIntellitype.getInstance().addHotKeyListener(this);
+-			} else if(FolderManager.isMac()) {
+-				logger.info("Mac OS X detected"); throw new NotImplementedException("Mac is not supported yet.");
+-			} else if(FolderManager.isUnix()) {
+-				wManager = new X11Native(); logger.info("X11/Unix detected");
++			} else if (FolderManager.isMac()) {
++				logger.info("OS: Mac OS");
++				throw new NotImplementedException("Mac is not supported yet.");
++			} else if (FolderManager.isUnix()) {
++				wManager = new X11Native();
++				logger.info("OS: Linux running X11");
+ 			} else {
+-				logger.info("No supported OS detected"); throw new UnsupportedOperationException("You aren't running Unix, Mac, or Windows.");
++				logger.info("No supported OS detected");
++				throw new UnsupportedOperationException(
++						"You aren't running Unix, Mac, or Windows.");
+ 			}
+ 
+ 			createTray();
+ 			addTray();
+ 
+-			displayPopup(trayIcon, "Checking For Updates...", "TeamScreen is now checking for updates...", TrayIcon.MessageType.INFO);
++			displayPopup(trayIcon, "Checking For Updates...",
++					"TeamScreen is now checking for updates...",
++					TrayIcon.MessageType.INFO);
+ 
+-			if(!new Authenticator(FolderManager.createImage("/images/TeamScreen-64px.png", "tray icon")).doAuthentication())
+-			{
+-			    System.exit(0);
+-			    return;
+-			}
+-			
+-			AutoUpdater updater = new AutoUpdater(Boolean.valueOf(properties.getConfig().getProperty("AutoUpdate")), 
+-					FolderManager.createImage("/images/TeamScreen-64px.png", "tray icon"));
+-			updater.addUpdaterListener(this);
+-			updater.checkForUpdates();
++			/*
++			 * if(!new
++			 * Authenticator(FolderManager.createImage("/images/TeamScreen-64px.png"
++			 * , "tray icon")).doAuthentication()) { System.exit(0); return; }
++			 */
++
++			// AutoUpdater updater = new
++			// AutoUpdater(Boolean.valueOf(properties.getConfig().getProperty("AutoUpdate")),
++			// FolderManager.createImage("/images/TeamScreen-64px.png",
++			// "tray icon"));
++			// updater.addUpdaterListener(this);
++			// updater.checkForUpdates();
+ 
+ 			this.netHandler = new NetHandler(this);
+ 
+-			displayPopup(trayIcon, "Ready", "Initialization complete.", TrayIcon.MessageType.INFO);
++			displayPopup(trayIcon, "Ready", "Initialization complete.",
++					TrayIcon.MessageType.INFO);
+ 
+-			//openMainWindow();
++			// openMainWindow();
+ 
+ 			logger.info("Started TeamScreen successfully!");
+ 		} catch (JIntellitypeException e) {
+-			if(FolderManager.isWindows())
++			if (FolderManager.isWindows())
+ 				JOptionPane.showMessageDialog(null,
+-						"TeamScreen is already running!",
+-						"Redundant Process",
++						"TeamScreen is already running!", "Redundant Process",
+ 						JOptionPane.ERROR_MESSAGE);
+ 			else
+-				JOptionPane.showMessageDialog(null,
+-						"TeamScreen was confused on whether you were running Windows or not...",
+-						"Well, this is embarrassing",
+-						JOptionPane.ERROR_MESSAGE);
++				JOptionPane
++						.showMessageDialog(
++								null,
++								"TeamScreen was confused on whether you were running Windows or not...",
++								"Well, this is embarrassing",
++								JOptionPane.ERROR_MESSAGE);
+ 			System.exit(1);
+ 		} catch (NotImplementedException e) {
+-			JOptionPane.showMessageDialog(null,
+-					e.getMessage(),
+-					"NotImplementedException",
+-					JOptionPane.ERROR_MESSAGE);
++			JOptionPane.showMessageDialog(null, e.getMessage(),
++					"NotImplementedException", JOptionPane.ERROR_MESSAGE);
+ 			e.printStackTrace();
+-			if(FolderManager.isWindows())
++			if (FolderManager.isWindows())
+ 				JIntellitype.getInstance().cleanUp();
+ 			System.exit(1);
+ 		} catch (UnsupportedOperationException e) {
+-			JOptionPane.showMessageDialog(null,
+-					e.getMessage(),
+-					"UnsupportedOperationException",
+-					JOptionPane.ERROR_MESSAGE);
++			JOptionPane.showMessageDialog(null, e.getMessage(),
++					"UnsupportedOperationException", JOptionPane.ERROR_MESSAGE);
+ 			e.printStackTrace();
+-			if(FolderManager.isWindows())
++			if (FolderManager.isWindows())
+ 				JIntellitype.getInstance().cleanUp();
+ 			System.exit(1);
+-		} catch(Exception e) {
++		} catch (Exception e) {
+ 			e.printStackTrace();
+-			JOptionPane.showMessageDialog(null,
++			JOptionPane.showMessageDialog(
++					null,
+ 					"TeamScreen has managed to cause an error:\n"
+-							+e.getMessage(),
+-							"Error",
+-							JOptionPane.ERROR_MESSAGE);
+-			if(FolderManager.isWindows())
++							+ e.getMessage(), "Error",
++					JOptionPane.ERROR_MESSAGE);
++			if (FolderManager.isWindows())
+ 				JIntellitype.getInstance().cleanUp();
+ 			System.exit(1);
+ 		}
+ 
+-		//Thread.currentThread().setDaemon(true);
++		// Thread.currentThread().setDaemon(true);
+ 	}
+ 
+-	public static void displayPopup(TrayIcon tray, String title, String text, TrayIcon.MessageType type) {
++	public static void displayPopup(TrayIcon tray, String title, String text,
++			TrayIcon.MessageType type) {
+ 		try {
+-			if(properties.getConfig().containsKey("NotificationLevel")) {
+-				TrayIcon.MessageType notificationLevel = TrayIcon.MessageType.valueOf(properties.getConfig().getProperty("NotificationLevel").toUpperCase());
+-				switch(notificationLevel) {
++			if (properties.getConfig().containsKey("NotificationLevel")) {
++				TrayIcon.MessageType notificationLevel = TrayIcon.MessageType
++						.valueOf(properties.getConfig()
++								.getProperty("NotificationLevel").toUpperCase());
++				switch (notificationLevel) {
+ 				case WARNING:
+-					if(type.equals(TrayIcon.MessageType.WARNING) || type.equals(TrayIcon.MessageType.ERROR))
++					if (type.equals(TrayIcon.MessageType.WARNING)
++							|| type.equals(TrayIcon.MessageType.ERROR))
+ 						tray.displayMessage(title, text, type);
+ 					break;
+ 				case INFO:
+ 					tray.displayMessage(title, text, type);
+ 					break;
+ 				case ERROR:
+-					if(type.equals(TrayIcon.MessageType.ERROR))
++					if (type.equals(TrayIcon.MessageType.ERROR))
+ 						tray.displayMessage(title, text, type);
+ 					break;
+ 				default:
+ 					tray.displayMessage(title, text, type);
+ 					break;
+ 				}
+-			}
+-			else {
+-				System.err.println("No NotificationLevel found, falling back to default");
++			} else {
++				System.err
++						.println("No NotificationLevel found, falling back to default");
+ 				properties.getConfig().setProperty("NotificationLevel", "info");
+ 				properties.saveConfig();
+ 				tray.displayMessage(title, text, type);
+@@ -265,21 +284,25 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 	}
+ 
+ 	public void enable() {
+-		displayPopup(trayIcon, "TeamScreen now enabled!", "Services started.", TrayIcon.MessageType.INFO);
++		displayPopup(trayIcon, "TeamScreen now enabled!", "Services started.",
++				TrayIcon.MessageType.INFO);
+ 		logger.info("TeamScreen enabled.");
+ 		enabled = true;
+ 		this.netHandler.enable();
+-		if(frame != null)
++		if (frame != null)
+ 			frame.updateStatus();
+ 	}
++
+ 	public void disable() {
+-		displayPopup(trayIcon, "TeamScreen now disabled!", "Services stopped.", TrayIcon.MessageType.INFO);
++		displayPopup(trayIcon, "TeamScreen now disabled!", "Services stopped.",
++				TrayIcon.MessageType.INFO);
+ 		logger.info("TeamScreen disabled.");
+ 		this.netHandler.disable();
+ 		enabled = false;
+-		if(frame != null)
++		if (frame != null)
+ 			frame.updateStatus();
+ 	}
++
+ 	public void exit() {
+ 		try {
+ 			properties.saveConfig();
+@@ -289,26 +312,28 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 			logger.severe("Configuration could not be saved");
+ 		}
+ 		tray.remove(trayIcon);
+-		if(FolderManager.isWindows())
++		if (FolderManager.isWindows())
+ 			JIntellitype.getInstance().cleanUp();
+ 		this.netHandler.disable();
+ 		TeamScreenDaemon.nullifyWindows();
++		logger.info("TeamScreen shutdown succesfully");
+ 		System.exit(0);
+ 	}
++
+ 	public boolean isEnabled() {
+ 		return enabled;
+ 	}
+ 
+ 	private void createTray() {
+-		//Check the SystemTray support
++		// Check the SystemTray support
+ 		if (!SystemTray.isSupported()) {
+ 			System.out.println("SystemTray is not supported");
+ 			return;
+ 		}
+ 		final PopupMenu popup = new PopupMenu();
+ 
+-		trayIcon = new TrayIcon(createImage("/images/TeamScreen-64px.png", "tray icon"));
+-
++		trayIcon = new TrayIcon(createImage("/images/TeamScreen-64px.png",
++				"tray icon"));
+ 
+ 		// Create a popup menu components
+ 		MenuItem openItem = new MenuItem("Open");
+@@ -316,7 +341,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 		MenuItem aboutItem = new MenuItem("About");
+ 		MenuItem exitItem = new MenuItem("Exit");
+ 
+-		//Add components to popup menu
++		// Add components to popup menu
+ 		popup.add(openItem);
+ 		popup.addSeparator();
+ 		popup.add(pushItem);
+@@ -336,17 +361,19 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 		});
+ 		trayIcon.addMouseListener(new MouseAdapter() {
+ 			public void mouseClicked(MouseEvent e) {
+-				if (e.getClickCount() == 1 && e.getButton() == MouseEvent.BUTTON1) {
++				if (e.getClickCount() == 1
++						&& e.getButton() == MouseEvent.BUTTON1) {
+ 					openMainWindow();
+ 				}
+ 			}
+-		}); 
++		});
+ 
+ 		ActionListener listener = new ActionListener() {
+ 			@Override
+ 			public void actionPerformed(ActionEvent e) {
+-				MenuItem item = (MenuItem)e.getSource();
+-				System.out.println(item.getLabel());
++				MenuItem item = (MenuItem) e.getSource();
++				if(verbose)
++					System.out.println(item.getLabel());
+ 				if ("Open".equals(item.getLabel())) {
+ 					SwingUtilities.invokeLater(new Runnable() {
+ 						@Override
+@@ -363,9 +390,11 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 						}
+ 					});
+ 				} else if ("About".equals(item.getLabel())) {
+-					if(Desktop.isDesktopSupported()) {
++					if (Desktop.isDesktopSupported()) {
+ 						try {
+-							Desktop.getDesktop().browse(URI.create("http://aptitekk.com/our-products/teamscreen/"));
++							Desktop.getDesktop()
++									.browse(URI
++											.create("http://aptitekk.com/our-products/teamscreen/"));
+ 						} catch (IOException e1) {
+ 							e1.printStackTrace();
+ 						}
+@@ -389,16 +418,17 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 	protected void openMainWindow() {
+ 		SwingUtilities.invokeLater(new Runnable() {
+ 			public void run() {
+-				if(frame == null)
++				if (frame == null)
+ 					frame = new MainFrame(instance);
+ 				frame.setVisible(true);
+ 			}
+ 		});
+ 	}
++
+ 	public void openSettingsWindow() {
+ 		SwingUtilities.invokeLater(new Runnable() {
+ 			public void run() {
+-				if(sframe == null)
++				if (sframe == null)
+ 					sframe = new SettingsFrame(instance);
+ 				sframe.setVisible(true);
+ 			}
+@@ -425,7 +455,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 
+ 	private void addTray() {
+ 		try {
+-			if(trayIcon == null) {
++			if (trayIcon == null) {
+ 				createTray();
+ 			}
+ 			tray.add(trayIcon);
+@@ -457,9 +487,9 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 
+ 	@Override
+ 	public void onHotKey(int identifier) {
+-		if(enabled)
++		if (enabled)
+ 			if (identifier == 1) {
+-				//User wants to share :D
++				// User wants to share :D
+ 				openWindowSelect();
+ 			}
+ 
+@@ -475,6 +505,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 			}
+ 		});
+ 	}
++
+ 	public void openWindowSelect() {
+ 		// Create the GUI on the event-dispatching thread
+ 		SwingUtilities.invokeLater(new Runnable() {
+@@ -491,8 +522,8 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 	}
+ 
+ 	/**
+-	 * Releases memory-hog Swing windows back into the JVM, which will slowly be released
+-	 * back into system memory.
++	 * Releases memory-hog Swing windows back into the JVM, which will slowly be
++	 * released back into system memory.
+ 	 */
+ 	public static void nullifyWindows() {
+ 		wSelect = null;
+@@ -502,8 +533,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 	}
+ 
+ 	@Override
+-	public void haltProgram()
+-	{
++	public void haltProgram() {
+ 		try {
+ 			properties.saveConfig();
+ 			logger.info("Configuration saved succesfully");
+@@ -512,39 +542,45 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 			logger.severe("Configuration could not be saved");
+ 		}
+ 		tray.remove(trayIcon);
+-		if(FolderManager.isWindows())
++		if (FolderManager.isWindows())
+ 			JIntellitype.getInstance().cleanUp();
+ 		this.netHandler.disable();
+ 		TeamScreenDaemon.nullifyWindows();
+ 	}
+-	public void restartApplication()
+-	{
++
++	public void restartApplication() {
+ 		logger.info("Restart was called!");
+ 		try {
+-			final File currentFileLocation = new File(TeamScreenDaemon.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+-			if(!currentFileLocation.getName().endsWith(".exe")) {
+-				; //continue
++			final File currentFileLocation = new File(TeamScreenDaemon.class
++					.getProtectionDomain().getCodeSource().getLocation()
++					.toURI());
++			if (!currentFileLocation.getName().endsWith(".exe")) {
++				; // continue
+ 			} else {
+-				final ProcessBuilder builder = new ProcessBuilder("start", "/d", currentFileLocation.getPath());
++				final ProcessBuilder builder = new ProcessBuilder("start",
++						"/d", currentFileLocation.getPath());
+ 				builder.start();
+ 				this.exit();
+ 			}
+-			
+-			
+-			final String javaBin = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
++
++			final String javaBin = System.getProperty("java.home")
++					+ File.separator + "bin" + File.separator + "java";
+ 			/* is it a jar file? */
+-			if(!currentFileLocation.getName().endsWith(".jar")) {
++			if (!currentFileLocation.getName().endsWith(".jar")) {
+ 				System.err.println("Jar was not found");
+ 				this.exit();
+ 			}
+-			final ProcessBuilder builder = new ProcessBuilder(javaBin, "-jar", currentFileLocation.getPath());
++			final ProcessBuilder builder = new ProcessBuilder(javaBin, "-jar",
++					currentFileLocation.getPath());
+ 			builder.start();
+ 			this.exit();
+ 		} catch (URISyntaxException | IOException e) {
+ 			e.printStackTrace();
+ 			logger.severe("Couldn't restart!");
+-			TeamScreenDaemon.displayPopup(TeamScreenDaemon.trayIcon, "Error!",
+-					"Could not restart TeamScreen!", TrayIcon.MessageType.ERROR);
++			TeamScreenDaemon
++					.displayPopup(TeamScreenDaemon.trayIcon, "Error!",
++							"Could not restart TeamScreen!",
++							TrayIcon.MessageType.ERROR);
+ 		}
+ 	}
+ 
+@@ -553,21 +589,24 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 	}
+ 
+ 	@Override
+-	public void logMessage(String message, LevelEnum level)
+-	{
+-	    switch(level) 
+-	    {
++	public void logMessage(String message, LevelEnum level) {
++		switch (level) {
+ 		case SEVERE:
+-		TeamScreenDaemon.logger.severe(message);
+-		TeamScreenDaemon.displayPopup(TeamScreenDaemon.trayIcon, "Error downloading updates!",
+-			message, TrayIcon.MessageType.ERROR);
+-		break;
++			TeamScreenDaemon.logger.severe(message);
++			TeamScreenDaemon.displayPopup(TeamScreenDaemon.trayIcon,
++					"Error downloading updates!", message,
++					TrayIcon.MessageType.ERROR);
++			break;
+ 		case INFO:
+-		    TeamScreenDaemon.logger.info(message);
+-		    break;
++			TeamScreenDaemon.logger.info(message);
++			break;
+ 		default:
+-		    break;
+-	    }
++			break;
++		}
++	}
++	
++	public static boolean getVerbose() {
++		return verbose;
+ 	}
+ 
+ }
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Util/WindowInfo.java b/TeamScreen/src/com/aptitekk/TeamScreen/Util/WindowInfo.java
+index 58a1a11..d059ca2 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Util/WindowInfo.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Util/WindowInfo.java
+@@ -1,48 +1,56 @@
+-package com.aptitekk.TeamScreen.Util;
+-
+-import java.util.Arrays;
+-import java.util.List;
+-
+-import com.sun.jna.Structure;
+-import com.sun.jna.platform.unix.X11;
+-
+-
+-/**
+- * Universal class type for window
+- *
+- * @author kevint.
+- *         Created Apr 6, 2014.
+- */
+-public class WindowInfo {
+-	
+-	public static class RECT extends Structure {
+-		public int left,top,right,bottom;
+-
+-		@Override
+-		protected List getFieldOrder() {
+-			return Arrays.asList(new String[] { "left", "top", "right", "bottom"});
+-		}
+-		public int[] asArray() {
+-			return new int[]{left,top,right,bottom};
+-		}
+-	}
+-	
+-	public int hwnd;
+-	RECT rect;
+-	String title;
+-	public WindowInfo(int hwnd, RECT rect, String title)
+-	{ this.hwnd = hwnd; this.rect = rect; this.title = title; }
+-
+-	public String toString() {
+-		return String.format("(%d,%d)-(%d,%d) : \"%s\" : ID: %d",
+-				rect.left,rect.top,rect.right,rect.bottom,title,hwnd);
+-	}
+-	
+-	public String getTitle() {
+-		return title;
+-	}
+-	public int[] getRect() {
+-		return new int[]{rect.left, rect.top, rect.right, rect.bottom};
+-	}
+-
+-}
++package com.aptitekk.TeamScreen.Util;
++
++import java.awt.Point;
++import java.awt.Rectangle;
++import java.util.Arrays;
++import java.util.List;
++
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++import com.sun.jna.Structure;
++import com.sun.jna.platform.unix.X11;
++
++
++/**
++ * Universal class type for window
++ *
++ * @author kevint.
++ *         Created Apr 6, 2014.
++ */
++public class WindowInfo {
++	
++	public static class RECT extends Structure {
++		public int left,top,right,bottom;
++
++		@Override
++		protected List getFieldOrder() {
++			return Arrays.asList(new String[] { "left", "top", "right", "bottom"});
++		}
++		public int[] asArray() {
++			return new int[]{left,top,right,bottom};
++		}
++	}
++	
++	public int hwnd;
++	private String windowTitle;
++	
++	public WindowInfo(int hwnd, String windowTitle)
++	{ this.hwnd = hwnd; this.windowTitle = windowTitle;}
++	
++	public String getTitle() {
++		return windowTitle;
++	}
++	
++	public Rectangle getAbsRectangle() {
++		return TeamScreenDaemon.getWindowManager().getDisplayRectangle(hwnd);
++	}
++	public Rectangle getRelativeRectangle() {
++		return convertArrayToRectangle(TeamScreenDaemon.getWindowManager().getWindowRect(hwnd));
++	}
++	
++	public static Rectangle convertArrayToRectangle(int[] rect) {
++		Point topleft = new Point(rect[0], rect[1]);
++		Point bottomright = new Point(rect[2], rect[3]);
++		return new Rectangle(topleft.x, topleft.y, bottomright.x - topleft.x, bottomright.y - topleft.y);
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/WindowUtil.java b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/WindowUtil.java
+index 50424a7..c1c0b7a 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/WindowUtil.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/WindowUtil.java
+@@ -1,174 +1,175 @@
+-package com.aptitekk.TeamScreen.Window.Util;
+-
+-import java.util.ArrayList;
+-import java.util.Collections;
+-import java.util.Comparator;
+-import java.util.List;
+-
+-import com.aptitekk.TeamScreen.Util.WindowInfo;
+-import com.aptitekk.TeamScreen.Util.WindowInfo.RECT;
+-import com.sun.jna.Native;
+-import com.sun.jna.Structure;
+-import com.sun.jna.platform.win32.WinDef.HWND;
+-import com.sun.jna.win32.StdCallLibrary;
+-import com.sun.jna.win32.W32APIOptions;
+-
+-/**
+- * Allows Java with JNA to get all open windows and a specified window rectangle
+- *
+- * @author kevint.
+- *         Created Apr 6, 2014.
+- */
+-public class WindowUtil {
+-
+-	public static List<WindowInfo> getWindows() {
+-		final List<WindowInfo> inflList = new ArrayList<WindowInfo>();
+-		final List<Integer> order = new ArrayList<Integer>();
+-		int top = User32.instance.GetTopWindow(0);
+-		while (top!=0) {
+-			order.add(top);
+-			top = User32.instance.GetWindow(top, User32.GW_HWNDNEXT);
+-		}
+-		User32.instance.EnumWindows(new WndEnumProc()
+-		{
+-			@Override
+-			public boolean callback(int hWnd, int lParam)
+-			{
+-				if (User32.instance.IsWindowVisible(hWnd)) {
+-					RECT r = new RECT();
+-					User32.instance.GetWindowRect(hWnd, r);
+-					if (r.left>-32000) {     // minimized
+-						byte[] buffer = new byte[1024];
+-						User32.instance.GetWindowTextA(hWnd, buffer, buffer.length);
+-						String title = Native.toString(buffer);
+-						inflList.add(new WindowInfo(hWnd, r, title));
+-					}
+-				}
+-				return true;
+-			}
+-		}, 0);
+-		Collections.sort(inflList, new Comparator<WindowInfo>()
+-				{
+-			@Override
+-			public int compare(WindowInfo o1, WindowInfo o2) {
+-				return order.indexOf(o1.hwnd)-order.indexOf(o2.hwnd);
+-			}
+-				});
+-		return inflList;
+-	}
+-
+-	public static interface WndEnumProc extends StdCallLibrary.StdCallCallback {
+-		boolean callback (int hWnd, int lParam);
+-	}
+-
+-	public static interface User32 extends StdCallLibrary
+-	{
+-		final User32 instance = (User32) Native.loadLibrary ("user32", User32.class);
+-		User32 INSTANCE = (User32) Native.loadLibrary("user32", User32.class,
+-	               W32APIOptions.DEFAULT_OPTIONS);
+-		boolean EnumWindows (WndEnumProc wndenumproc, int lParam);
+-		boolean IsWindowVisible(int hWnd);
+-		int GetWindowRect(int hWnd, RECT r);
+-		void GetWindowTextA(int hWnd, byte[] buffer, int buflen);
+-		int GetTopWindow(int hWnd);
+-		int GetWindow(int hWnd, int flag);
+-		
+-		HWND FindWindow(String lpClassName, String lpWindowName);
+-	    int GetWindowRect(HWND handle, int[] rect);
+-	    
+-		final int GW_HWNDNEXT = 2;
+-	}
+-	
+-	public static WindowInfo getTopWindow() {
+-		final List<WindowInfo> topWindowList = new ArrayList<WindowInfo>();
+-		int top = User32.instance.GetTopWindow(0);
+-		User32.instance.EnumWindows(new WndEnumProc()
+-		{
+-			@Override
+-			public boolean callback(int hWnd, int lParam)
+-			{
+-				if (User32.instance.IsWindowVisible(hWnd)) {
+-					RECT r = new RECT();
+-					User32.instance.GetWindowRect(hWnd, r);
+-					if (r.left>-32000) {     // minimized
+-						byte[] buffer = new byte[1024];
+-						User32.instance.GetWindowTextA(hWnd, buffer, buffer.length);
+-						String title = Native.toString(buffer);
+-						topWindowList.add(new WindowInfo(hWnd, r, title));
+-					}
+-				}
+-				return true;
+-			}
+-		}, 0);
+-		return topWindowList.get(0);
+-	}
+-	
+-	public static WindowInfo getWindowbyTitle(String windowTitle) throws WindowNotFoundException {
+-		List<WindowInfo> windows = getWindows();
+-		for(WindowInfo window : windows) {
+-			if(window.getTitle().equals(windowTitle)) {
+-				return window;
+-			}
+-		}
+-		throw new WindowNotFoundException("", windowTitle);
+-	}
+-
+-	private static int[] getRect(String windowName) throws WindowNotFoundException,
+-	GetWindowRectException {
+-		int hwnd = -1;
+-		List<WindowInfo> windows = getWindows();
+-		for(WindowInfo window : windows) {
+-			if(window.getTitle().equals(windowName)) {
+-				hwnd = window.hwnd;
+-			}
+-		}
+-		if(hwnd == -1) {
+-			throw new WindowNotFoundException("", windowName);
+-		}
+-		RECT r = new RECT();
+-		int result = User32.instance.GetWindowRect(hwnd, r);
+-		if(result == 0) {
+-			throw new GetWindowRectException(windowName);
+-		}
+-		return r.asArray();
+-	}
+-
+-	@SuppressWarnings("serial")
+-	public static class WindowNotFoundException extends Exception {
+-		public WindowNotFoundException(String className, String windowName) {
+-			super(String.format("Window null for className: %s; windowName: %s", 
+-					className, windowName));
+-		}
+-	}
+-
+-	@SuppressWarnings("serial")
+-	public static class GetWindowRectException extends Exception {
+-		public GetWindowRectException(String windowName) {
+-			super("Window Rect not found for " + windowName);
+-		}
+-	}
+-
+-	public static int[] getWindowRect(String windowName) {
+-		int[] rect;
+-		try {
+-			rect = getRect(windowName);
+-			return rect;
+-		} catch (WindowNotFoundException e) {
+-			e.printStackTrace();
+-		} catch (GetWindowRectException e) {
+-			e.printStackTrace();
+-		}      
+-		return null;
+-	}
+-	
+-	public synchronized static WindowInfo updateWindow(WindowInfo w) throws WindowNotFoundException {
+-		List<WindowInfo> windows = getWindows();
+-		for(WindowInfo window : windows) {
+-			if(window.hwnd == w.hwnd) {
+-				return window;
+-			}
+-		}
+-		throw new WindowNotFoundException("", w.getTitle());
+-	}
+-
+-}
++package com.aptitekk.TeamScreen.Window.Util;
++
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.Comparator;
++import java.util.List;
++
++import com.aptitekk.TeamScreen.Util.WindowInfo;
++import com.aptitekk.TeamScreen.Util.WindowInfo.RECT;
++import com.sun.jna.Native;
++import com.sun.jna.Structure;
++import com.sun.jna.platform.win32.WinDef.HWND;
++import com.sun.jna.win32.StdCallLibrary;
++import com.sun.jna.win32.W32APIOptions;
++
++/**
++ * Allows Java with JNA to get all open windows and a specified window rectangle
++ *
++ * @author kevint.
++ *         Created Apr 6, 2014.
++ */
++@Deprecated
++public class WindowUtil {
++
++	public static List<WindowInfo> getWindows() {
++		final List<WindowInfo> inflList = new ArrayList<WindowInfo>();
++		final List<Integer> order = new ArrayList<Integer>();
++		int top = User32.instance.GetTopWindow(0);
++		while (top!=0) {
++			order.add(top);
++			top = User32.instance.GetWindow(top, User32.GW_HWNDNEXT);
++		}
++		User32.instance.EnumWindows(new WndEnumProc()
++		{
++			@Override
++			public boolean callback(int hWnd, int lParam)
++			{
++				if (User32.instance.IsWindowVisible(hWnd)) {
++					RECT r = new RECT();
++					User32.instance.GetWindowRect(hWnd, r);
++					if (r.left>-32000) {     // minimized
++						byte[] buffer = new byte[1024];
++						User32.instance.GetWindowTextA(hWnd, buffer, buffer.length);
++						String title = Native.toString(buffer);
++						inflList.add(new WindowInfo(hWnd, title));
++					}
++				}
++				return true;
++			}
++		}, 0);
++		Collections.sort(inflList, new Comparator<WindowInfo>()
++				{
++			@Override
++			public int compare(WindowInfo o1, WindowInfo o2) {
++				return order.indexOf(o1.hwnd)-order.indexOf(o2.hwnd);
++			}
++				});
++		return inflList;
++	}
++
++	public static interface WndEnumProc extends StdCallLibrary.StdCallCallback {
++		boolean callback (int hWnd, int lParam);
++	}
++
++	public static interface User32 extends StdCallLibrary
++	{
++		final User32 instance = (User32) Native.loadLibrary ("user32", User32.class);
++		User32 INSTANCE = (User32) Native.loadLibrary("user32", User32.class,
++	               W32APIOptions.DEFAULT_OPTIONS);
++		boolean EnumWindows (WndEnumProc wndenumproc, int lParam);
++		boolean IsWindowVisible(int hWnd);
++		int GetWindowRect(int hWnd, RECT r);
++		void GetWindowTextA(int hWnd, byte[] buffer, int buflen);
++		int GetTopWindow(int hWnd);
++		int GetWindow(int hWnd, int flag);
++		
++		HWND FindWindow(String lpClassName, String lpWindowName);
++	    int GetWindowRect(HWND handle, int[] rect);
++	    
++		final int GW_HWNDNEXT = 2;
++	}
++	
++	public static WindowInfo getTopWindow() {
++		final List<WindowInfo> topWindowList = new ArrayList<WindowInfo>();
++		int top = User32.instance.GetTopWindow(0);
++		User32.instance.EnumWindows(new WndEnumProc()
++		{
++			@Override
++			public boolean callback(int hWnd, int lParam)
++			{
++				if (User32.instance.IsWindowVisible(hWnd)) {
++					RECT r = new RECT();
++					User32.instance.GetWindowRect(hWnd, r);
++					if (r.left>-32000) {     // minimized
++						byte[] buffer = new byte[1024];
++						User32.instance.GetWindowTextA(hWnd, buffer, buffer.length);
++						String title = Native.toString(buffer);
++						topWindowList.add(new WindowInfo(hWnd, title));
++					}
++				}
++				return true;
++			}
++		}, 0);
++		return topWindowList.get(0);
++	}
++	
++	public static WindowInfo getWindowbyTitle(String windowTitle) throws WindowNotFoundException {
++		List<WindowInfo> windows = getWindows();
++		for(WindowInfo window : windows) {
++			if(window.getTitle().equals(windowTitle)) {
++				return window;
++			}
++		}
++		throw new WindowNotFoundException("", windowTitle);
++	}
++
++	private static int[] getRect(String windowName) throws WindowNotFoundException,
++	GetWindowRectException {
++		int hwnd = -1;
++		List<WindowInfo> windows = getWindows();
++		for(WindowInfo window : windows) {
++			if(window.getTitle().equals(windowName)) {
++				hwnd = window.hwnd;
++			}
++		}
++		if(hwnd == -1) {
++			throw new WindowNotFoundException("", windowName);
++		}
++		RECT r = new RECT();
++		int result = User32.instance.GetWindowRect(hwnd, r);
++		if(result == 0) {
++			throw new GetWindowRectException(windowName);
++		}
++		return r.asArray();
++	}
++
++	@SuppressWarnings("serial")
++	public static class WindowNotFoundException extends Exception {
++		public WindowNotFoundException(String className, String windowName) {
++			super(String.format("Window null for className: %s; windowName: %s", 
++					className, windowName));
++		}
++	}
++
++	@SuppressWarnings("serial")
++	public static class GetWindowRectException extends Exception {
++		public GetWindowRectException(String windowName) {
++			super("Window Rect not found for " + windowName);
++		}
++	}
++
++	public static int[] getWindowRect(String windowName) {
++		int[] rect;
++		try {
++			rect = getRect(windowName);
++			return rect;
++		} catch (WindowNotFoundException e) {
++			e.printStackTrace();
++		} catch (GetWindowRectException e) {
++			e.printStackTrace();
++		}      
++		return null;
++	}
++	
++	public synchronized static WindowInfo updateWindow(WindowInfo w) throws WindowNotFoundException {
++		List<WindowInfo> windows = getWindows();
++		for(WindowInfo window : windows) {
++			if(window.hwnd == w.hwnd) {
++				return window;
++			}
++		}
++		throw new WindowNotFoundException("", w.getTitle());
++	}
++
++}
+-- 
+2.39.5 (Apple Git-154)
+

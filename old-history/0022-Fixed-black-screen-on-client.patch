@@ -1,0 +1,41 @@
+From c64a1e085a9b78d9f03e2aecbde2ba208c56a351 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 6 Apr 2014 22:06:23 -0600
+Subject: [PATCH 022/101] Fixed black screen on client
+
+---
+ .../src/com/aptitekk/TeamScreen/Net/jrc/JRCWindowFrame.java   | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCWindowFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCWindowFrame.java
+index 1703138..2b27772 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCWindowFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCWindowFrame.java
+@@ -21,6 +21,7 @@ public class JRCWindowFrame extends JFrame implements RemoteControlClient {
+ 	
+ 	private JRCClient controller;
+ 	private ImageIcon viewIcon;
++	private JLabel picLabel;
+ 	private boolean firstFrame = true;
+ 	
+ 	public JRCWindowFrame(JRCClient controller) {
+@@ -28,7 +29,7 @@ public class JRCWindowFrame extends JFrame implements RemoteControlClient {
+ 		
+ 		viewIcon = new ImageIcon( ImageFactory.loadImage("jar://images/teamscreen.png") );
+ 		
+-		JLabel picLabel = new JLabel(viewIcon);
++		picLabel = new JLabel(viewIcon);
+ 		add(picLabel);
+ 		
+ 		this.setSize(picLabel.getSize());
+@@ -45,6 +46,7 @@ public class JRCWindowFrame extends JFrame implements RemoteControlClient {
+ 		}
+ 		
+ 		viewIcon.setImage(image);
++		picLabel.setIcon(viewIcon);
+ 		
+ 		if(firstFrame && image.getWidth(this)!=-1 && image.getHeight(this)!=-1)
+ 		{
+-- 
+2.39.5 (Apple Git-154)
+

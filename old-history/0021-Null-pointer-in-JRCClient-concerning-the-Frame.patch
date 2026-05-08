@@ -1,0 +1,64 @@
+From 63473fe07fcb7da447fb0075c69e93bd698259f6 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 6 Apr 2014 22:03:52 -0600
+Subject: [PATCH 021/101] Null pointer in JRCClient concerning the Frame
+
+---
+ .../TeamScreen/Net/jrc/JRCClient.java         | 19 +++++++------------
+ 1 file changed, 7 insertions(+), 12 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
+index 1298bde..11911b4 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
+@@ -58,15 +58,15 @@ public class JRCClient extends Thread implements RemoteClientController,MouseLis
+ 		
+ 		clientVar = this;
+ 		
+-		timeoutTimer = new TimeWatch(30000);
+-		timeoutTimer.addActionListener(this);
+-		timeoutTimer.setActionCommand("timedOut");
++		this.timeoutTimer = new TimeWatch(30000);
++		this.timeoutTimer.addActionListener(this);
++		this.timeoutTimer.setActionCommand("timedOut");
+ 	}
+ 	
+ 	@Override
+ 	public void run() {
+ 		connect();
+-		while(clientRunning) {
++		while(this.clientRunning) {
+ 			;
+ 		}
+ 	}
+@@ -113,6 +113,7 @@ public class JRCClient extends Thread implements RemoteClientController,MouseLis
+ 				this.mainConnection = new SocketConnection( new Socket(this.address,this.port),this.address+":"+this.port );
+ 			//}
+ 		
++			this.client = new JRCWindowFrame(this);
+ 			showClient();
+ 			
+ 			TeamScreenDaemon.logger.info("Logged in. Sending alias "+hubAlias+" to server.");
+@@ -182,17 +183,11 @@ public class JRCClient extends Thread implements RemoteClientController,MouseLis
+ 	 */
+ 	public void showClient()
+ 	{
+-		SwingUtilities.invokeLater(new Runnable() {
+-            @Override
+-            public void run() {
+-            	client = new JRCWindowFrame(clientVar);
+-                client.setVisible(true);
+-            }
+-        });
++		this.client.setVisible(true);
+ 	}
+ 	public void doLayout()
+ 	{
+-		client.doLayout();
++		this.client.doLayout();
+ 	}
+ 	
+ 	public void disconnect()
+-- 
+2.39.5 (Apple Git-154)
+

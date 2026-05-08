@@ -1,0 +1,322 @@
+From 0fa1ffa4512a3ba9e2eb70fe58e1f5cea59c90f4 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Tue, 29 Jul 2014 13:09:52 -0600
+Subject: [PATCH 064/101] More work on settings (configureneighbor frame now
+ uses cardlayout), working on the JList that receives active team screen
+ machines to remove the whitespace bug
+
+---
+ .../Frames/Settings/ConfigureNeighbor.java    | 109 +++++++++++++++---
+ .../TeamScreen/Frames/SettingsFrame.java      |   2 +-
+ .../aptitekk/TeamScreen/JNA/X11Native.java    |   3 +-
+ .../TeamScreenBroadcastThread.java            |   2 +-
+ .../aptitekk/TeamScreen/Net/RadarThread.java  |   5 +-
+ .../Window/Util/JNeighborDisplayPanel.java    |  14 ++-
+ 6 files changed, 105 insertions(+), 30 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/Settings/ConfigureNeighbor.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/Settings/ConfigureNeighbor.java
+index 2b82a9d..0274c61 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/Settings/ConfigureNeighbor.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/Settings/ConfigureNeighbor.java
+@@ -1,8 +1,10 @@
+ package com.aptitekk.TeamScreen.Frames.Settings;
+ 
+ import java.awt.BorderLayout;
++import java.awt.CardLayout;
+ import java.awt.Component;
+ import java.awt.Dimension;
++import java.awt.FlowLayout;
+ import java.awt.Image;
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+@@ -45,7 +47,7 @@ public class ConfigureNeighbor extends JFrame implements ListSelectionListener,
+ 	HashMap<String, String> newMap = new HashMap<String, String>();
+ 	
+ 	JList<?> neighborPick;
+-	JTabbedPane neighborPane;
++	JPanel neighborPane;
+ 	JButton savebtn;
+ 	
+ 	JLabel hostInfo;
+@@ -57,12 +59,19 @@ public class ConfigureNeighbor extends JFrame implements ListSelectionListener,
+ 	public DefaultComboBoxModel<String> aliveNeighborsModel;
+ 	public ArrayList<String> rawAliveNeighborInfo;
+ 	JButton selectNewNeighbor;
++	JButton manualSelect;
++	JButton cancel;
+ 	RadarThread radarThread;
+ 	
+ 	JTextField manualHost;
+ 	JTextField manualIP;
+ 	JComboBox<String> manualSlot;
+ 	JButton selectManual;
++	JButton backtoSelect;
++	
++	final static String INFOPANEL = "Info";
++	final static String SELECTPANEL = "Select";
++	final static String MANUALPANEL = "Manual";
+ 	
+ 	public ConfigureNeighbor(TeamScreenDaemon instance, JNeighborDisplayPanel ndisplay) {
+ 		master = instance;
+@@ -73,8 +82,8 @@ public class ConfigureNeighbor extends JFrame implements ListSelectionListener,
+ 		this.setTitle("Configure Neighbor");
+ 		System.setProperty("com.apple.mrj.application.apple.menu.about.name", "TeamScreen Settings");
+ 		
+-		this.setSize(600, 500);
+-		this.setMaximumSize(new Dimension(600, 500));
++		this.setSize(300, 500);
++		this.setMaximumSize(new Dimension(300, 500));
+ 		this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+ 		this.setResizable(false);
+ 		this.setIconImage(FolderManager.createImage("/images/TeamScreen-64px.png", "tray icon"));
+@@ -142,21 +151,33 @@ public class ConfigureNeighbor extends JFrame implements ListSelectionListener,
+ 		slotPanel.add(slotLabel);
+ 		slotPanel.add(slotInfo);
+ 		
++		JPanel configPanel = new JPanel();
+ 		configInfo = new JButton("Configure");
+ 		configInfo.addActionListener(this);
++		configPanel.add(new JPanel());
++		configPanel.add(configInfo);
+ 		infoPanel.add(hostPanel);
+ 		infoPanel.add(ipPanel);
+ 		infoPanel.add(slotPanel);
+-		infoPanel.add(configInfo);
++		infoPanel.add(configPanel);
+ 		
+ 		
+ 		JPanel selectPanel = new JPanel();
+ 		selectPanel.setLayout(new BorderLayout());
+ 		newNeighborPick = new JList<String>(aliveNeighborsModel);
++		JPanel buttonPanel = new JPanel(new FlowLayout());
++		cancel = new JButton("Cancel");
++		cancel.addActionListener(this);
+ 		selectNewNeighbor = new JButton("Select");
+ 		selectNewNeighbor.addActionListener(this);
++		manualSelect = new JButton("Manual");
++		manualSelect.addActionListener(this);
++		buttonPanel.add(cancel);
++		buttonPanel.add(selectNewNeighbor);
++		buttonPanel.add(manualSelect);
+ 		selectPanel.add(newNeighborPick, BorderLayout.CENTER);
+-		selectPanel.add(selectNewNeighbor, BorderLayout.PAGE_END);
++		selectPanel.add(buttonPanel, BorderLayout.PAGE_END);
++		
+ 		
+ 		JPanel manualPanel = new JPanel();
+ 		manualPanel.setLayout(new BoxLayout(manualPanel, BoxLayout.PAGE_AXIS));
+@@ -180,17 +201,22 @@ public class ConfigureNeighbor extends JFrame implements ListSelectionListener,
+ 		_slotPanel.add(_slotLabel);
+ 		_slotPanel.add(manualSlot);
+ 		
++		JPanel manualButtonPanel = new JPanel(new FlowLayout());
+ 		selectManual = new JButton("Select");
+ 		selectManual.addActionListener(this);
++		backtoSelect = new JButton("Back");
++		backtoSelect.addActionListener(this);
++		manualButtonPanel.add(selectManual);
++		manualButtonPanel.add(backtoSelect);
+ 		manualPanel.add(_hostPanel);
+ 		manualPanel.add(_ipPanel);
+ 		manualPanel.add(_slotPanel);
+-		manualPanel.add(selectManual);
++		manualPanel.add(manualButtonPanel);
+ 		
+-		neighborPane = new JTabbedPane();
+-		neighborPane.add("Info", infoPanel);
+-		neighborPane.add("Select", selectPanel);
+-		neighborPane.add("Manual", manualPanel);
++		neighborPane = new JPanel(new CardLayout());
++		neighborPane.add(infoPanel, INFOPANEL);
++		neighborPane.add(selectPanel, SELECTPANEL);
++		neighborPane.add(manualPanel, MANUALPANEL);
+ 		this.getContentPane().add(neighborPane, BorderLayout.CENTER);
+ 		
+ 		this.savebtn = new JButton("Save");
+@@ -252,30 +278,77 @@ public class ConfigureNeighbor extends JFrame implements ListSelectionListener,
+ 			}
+ 		}
+ 	}
+-
++	
++	private void refreshInfo() {
++		String[] data = null;
++		if(neighborPick.getSelectedIndex() == 0) { // right
++			data = newMap.get("Right").split(":");
++		} else if(neighborPick.getSelectedIndex() == 1) { //left
++			data = newMap.get("Left").split(":");
++		} else if(neighborPick.getSelectedIndex() == 2) {
++			data = newMap.get("Top").split(":");
++		} else if(neighborPick.getSelectedIndex() == 3) {
++			data = newMap.get("Bottom").split(":");
++		} else if(neighborPick.getSelectedIndex() == 4) {
++			data = newMap.get("Projector").split(":");
++		} else { //center
++			data = newMap.get("Center").split(":");
++		} try {
++			this.hostInfo.setText(data[0]);
++			this.manualHost.setText(data[0]);
++			this.manualIP.setText(data[1]);
++			this.ipInfo.setText(data[1]);
++			this.slotInfo.setText(data[2]);
++			this.manualSlot.setSelectedItem(data[2]);
++		} catch (ArrayIndexOutOfBoundsException ex) {
++			this.hostInfo.setText("");
++			this.manualHost.setText("");
++			this.manualIP.setText("");
++			this.ipInfo.setText("");
++			this.slotInfo.setText("");
++			this.manualSlot.setSelectedItem("");
++		}
++	}
+ 	@Override
+ 	public void actionPerformed(ActionEvent e) {
+ 		if(e.getSource().equals(this.configInfo)) {
+-			this.neighborPane.setSelectedIndex(1);
++			((CardLayout) this.neighborPane.getLayout()).show(this.neighborPane, SELECTPANEL);
+ 		} else if(e.getSource().equals(this.selectNewNeighbor)) {
+ 			String rawdata = this.rawAliveNeighborInfo.get(newNeighborPick.getSelectedIndex());
+ 			rawdata = rawdata.replace(NetHandler.PACKET_SEPARATOR_CONSTANT, ":");
+-			String data = rawdata +":"+ newMap.get("Center").split(":")[2];
+-			System.out.println("Data: " + data);
+-			newMap.put(indexToString(neighborPick.getSelectedIndex()), data);
+-			this.neighborPane.setSelectedIndex(0);
++			rawdata = rawdata.replaceAll("[\\n\\t\\s\\r ]", "");
++			StringBuilder data = new StringBuilder();
++			data.append(rawdata.split(":")[0]);
++			data.append(":");
++			data.append(rawdata.split(":")[1]);
++			data.append(":");
++			data.append("A");
++			//data.append(newMap.get("Center").split(":")[2]);
++			System.out.println("Data: " + data.toString());
++			newMap.put(indexToString(neighborPick.getSelectedIndex()), data.toString());
++			((CardLayout) this.neighborPane.getLayout()).show(this.neighborPane, INFOPANEL);
+ 			this.neighborPick.setSelectedIndex(neighborPick.getSelectedIndex());
++			this.refreshInfo();
+ 			this.repaint();
+ 		} else if(e.getSource().equals(this.selectManual)) {
+ 			String data = manualHost.getText() + ":" + manualIP.getText() + ":" + manualSlot.getSelectedItem();
+ 			newMap.put(indexToString(neighborPick.getSelectedIndex()), data);
+-			this.neighborPane.setSelectedIndex(0);
++			((CardLayout) this.neighborPane.getLayout()).show(this.neighborPane, INFOPANEL);
+ 			this.neighborPick.setSelectedIndex(neighborPick.getSelectedIndex());
++			this.refreshInfo();
+ 			this.repaint();
+ 		} else if(e.getSource().equals(this.savebtn)) {
+ 			this.neighborDisplay.refresh(newMap);
+-			radarThread.interrupt();
++			if(radarThread != null)
++				radarThread.interrupt();
++			radarThread = null;
+ 			this.dispose();
++		} else if(e.getSource().equals(this.manualSelect)) {
++			((CardLayout) this.neighborPane.getLayout()).show(this.neighborPane, MANUALPANEL);
++		} else if(e.getSource().equals(this.cancel)) {
++			((CardLayout) this.neighborPane.getLayout()).show(this.neighborPane, INFOPANEL);
++		} else if(e.getSource().equals(this.backtoSelect)) {
++			((CardLayout) this.neighborPane.getLayout()).show(this.neighborPane, SELECTPANEL);
+ 		}
+ 	}
+ 	
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
+index 5204318..b708d27 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
+@@ -19,7 +19,7 @@ import com.aptitekk.TeamScreen.Frames.Settings.ConfigureNeighbor;
+ import com.aptitekk.TeamScreen.Window.Util.JNeighborDisplayPanel;
+ 
+ /**
+- * TODO Put here a description of what this class does.
++ * Settings JFrame of the TeamScreen application
+  *
+  * @author kevint.
+  *         Created Apr 6, 2014.
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
+index 888ec2a..68ac545 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
+@@ -137,8 +137,7 @@ public class X11Native extends WindowManager {
+         }
+ 
+         if( xa_ret_type == null ){
+-            //the specified property does not exist for the specified window
+-            return null;
++            return null; //the specified property does not exist for the specified window
+         }
+ 
+         if( xa_ret_type == null ){
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java
+index 392eed0..569cd0f 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java
+@@ -55,7 +55,7 @@ public class TeamScreenBroadcastThread extends Thread{
+             
+             String IP = this.socket.getLocalAddress().getHostAddress();
+            
+-            byte[] ad = (name + NetHandler.PACKET_SEPARATOR_CONSTANT + IP).getBytes();
++            byte[] ad = (name + NetHandler.PACKET_SEPARATOR_CONSTANT + IP + "\r\n").getBytes();
+             
+             List<String> slots = Arrays.asList(new String[]{"A","B","C","D","E","F"});
+             Integer[] ports = new Integer[]{4455, 4456, 4457, 4458, 4459, 4460};
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/RadarThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/RadarThread.java
+index 79063bb..246f2d7 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/RadarThread.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/RadarThread.java
+@@ -56,11 +56,12 @@ public class RadarThread extends Thread{
+ 			DatagramPacket packet;
+ 			while (stillRunning && !Thread.interrupted()) 
+ 			{
+-			    byte[] buf = new byte[256];
++			    byte[] buf = new byte[39];
+ 			    packet = new DatagramPacket(buf, buf.length);
+ 			    socket.receive(packet);
+ 	
+-			    String received = new String(packet.getData());			  
++			    String received = new String(packet.getData());
++			    received = received.replaceAll("[\\n\\t\\s\\r ]", "");
+ 			    
+ 			    String[] splitData = received.split(NetHandler.PACKET_SEPARATOR_CONSTANT);
+ 			    
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JNeighborDisplayPanel.java b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JNeighborDisplayPanel.java
+index 856c588..a0622fd 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JNeighborDisplayPanel.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JNeighborDisplayPanel.java
+@@ -74,6 +74,7 @@ public class JNeighborDisplayPanel extends JPanel{
+ 	
+ 	public void refresh() {
+ 		this.removeAll();
++		this.repaint();
+ 		initGui(getConfigData());
+ 		JFrame frame = (JFrame) SwingUtilities.getRoot(this);
+ 		frame.pack();
+@@ -81,6 +82,7 @@ public class JNeighborDisplayPanel extends JPanel{
+ 	}
+ 	public void refresh(HashMap<String, String> newData) {
+ 		this.removeAll();
++		this.repaint();
+ 		initGui(newData);
+ 		JFrame frame = (JFrame) SwingUtilities.getRoot(this);
+ 		frame.pack();
+@@ -93,12 +95,12 @@ public class JNeighborDisplayPanel extends JPanel{
+ 	private void initGui(HashMap<String, String> newData) {
+ 		this.mappedData = newData;
+ 		
+-		String rightData = getConfigData().get("Right");
+-		String leftData = getConfigData().get("Left");
+-		String topData = getConfigData().get("Top");
+-		String bottomData = getConfigData().get("Bottom");
+-		String projectorData = getConfigData().get("Projector");
+-		String centerData = getConfigData().get("Center");
++		String rightData = getCurrentData().get("Right");
++		String leftData = getCurrentData().get("Left");
++		String topData = getCurrentData().get("Top");
++		String bottomData = getCurrentData().get("Bottom");
++		String projectorData = getCurrentData().get("Projector");
++		String centerData = getCurrentData().get("Center");
+ 		
+ 		ImageIcon rightPicture = JArrowButton.getImagefromDirection(JArrowButton.EAST);
+ 		ImageIcon leftPicture = JArrowButton.getImagefromDirection(JArrowButton.WEST);
+-- 
+2.39.5 (Apple Git-154)
+

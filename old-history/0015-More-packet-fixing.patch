@@ -1,0 +1,24 @@
+From d3c4c72655d659eb7535448079deb867d2a20b7d Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 6 Apr 2014 21:45:58 -0600
+Subject: [PATCH 015/101] More packet fixing
+
+---
+ TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+index 9c5e1e6..6e4ee41 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+@@ -39,6 +39,7 @@ public class PacketProcessor {
+ 					this.master.startNewJRCServer(TeamScreenDaemon.windowPushed);
+ 					try {
+ 						return "connectToMe"+NetHandler.PACKET_SEPARATOR_CONSTANT+TeamScreenBroadcastThread.getLanIP()+
++								NetHandler.PACKET_SEPARATOR_CONSTANT+
+ 								this.master.parent.properties.getConfig().getProperty("Slot");
+ 					} catch (Exception exception) {
+ 						exception.printStackTrace();
+-- 
+2.39.5 (Apple Git-154)
+

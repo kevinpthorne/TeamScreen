@@ -1,0 +1,188 @@
+From f647fb968bc6802253893993af90db3b30766750 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 21 May 2014 08:39:55 -0600
+Subject: [PATCH 049/101] changed all debug messages to the system out to keep
+ them out of the logs
+
+Signed-off-by: Kevin Thorne <kevint@aptitekk.com>
+---
+ .../Net/Broker/TeamScreenBrokerThread.java       |  6 +++---
+ .../Net/Listeners/ListenerHandler.java           |  2 +-
+ .../TeamScreen/Net/Listeners/PacketListener.java | 10 +++++-----
+ .../TeamScreen/Net/jrc/ClientApplication.java    | 16 ++++++++--------
+ .../Net/jrc/DynamicJRCServerApplication.java     |  7 +++----
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java    |  4 ++--
+ 6 files changed, 22 insertions(+), 23 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broker/TeamScreenBrokerThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broker/TeamScreenBrokerThread.java
+index 24e7360..be9038b 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broker/TeamScreenBrokerThread.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broker/TeamScreenBrokerThread.java
+@@ -42,11 +42,11 @@ public class TeamScreenBrokerThread extends Thread{
+ 				DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
+ 				BufferedReader inFromServer = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+ 				outToServer.writeBytes(this.toSend + "\r\n");
+-				TeamScreenDaemon.logger.info("Sent: " + this.toSend);
++				System.out.println("Sent: " + this.toSend);
+ 				String receivedPacket = inFromServer.readLine();
+-				TeamScreenDaemon.logger.info("Received: " + receivedPacket);
++				System.out.println("Received: " + receivedPacket);
+ 				String toReturn = this.master.getProcessor().onPacketReceived(receivedPacket)+ "\r\n";
+-				TeamScreenDaemon.logger.info("Returned: " + toReturn);
++				System.out.println("Returned: " + toReturn);
+ 				outToServer.writeBytes(toReturn);
+ 				clientSocket.close();
+ 				enabled = false;
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/ListenerHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/ListenerHandler.java
+index d21ce5b..2bf11cf 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/ListenerHandler.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/ListenerHandler.java
+@@ -41,7 +41,7 @@ public class ListenerHandler extends Thread{
+ 		{
+ 			try {
+ 				Socket connectionSocket = serverSocket.accept();
+-				TeamScreenDaemon.logger.info("Socket Accepted!");
++				System.out.println("Socket Accepted!");
+ 				
+ 				PacketListener listener = new PacketListener(netHandler, connectionSocket);
+ 				this.listenerList.add(listener);
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
+index 902b288..4b3f685 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
+@@ -50,21 +50,21 @@ public class PacketListener extends Thread{
+ 				DataOutputStream outToClient = new DataOutputStream(connectionSocket.getOutputStream());
+ 
+ 				connectionSocket.setSoTimeout(20000);
+-				TeamScreenDaemon.logger.info("Reading from client...");
++				System.out.println("Reading from client...");
+ 				String clientPacket = inFromClient.readLine();
+ 				if(clientPacket == null)
+ 				{
+-					TeamScreenDaemon.logger.info("Null :(");
++					System.out.println("Null :(");
+ 					this.stopping = true;
+ 					this.interrupt();
+ 					break;
+ 				}
+-				TeamScreenDaemon.logger.info("Received: " + clientPacket);
++				System.out.println("Received: " + clientPacket);
+ 				String toSend = "";
+ 				
+ 				toSend = this.master.getProcessor().onPacketReceived(clientPacket);
+ 				if(toSend == null) {
+-					TeamScreenDaemon.logger.info("Null :(");
++					System.out.println("Null :(");
+ 					this.stopping = true;
+ 					this.interrupt();
+ 					break;
+@@ -72,7 +72,7 @@ public class PacketListener extends Thread{
+ 				
+ 			    if(!toSend.equals(""))
+ 			    	outToClient.writeBytes(toSend +"\r\n");
+-			    TeamScreenDaemon.logger.info("Sent: "+toSend);
++			    System.out.println("Sent: "+toSend);
+ 			} catch (SocketTimeoutException e) {
+ 				e.printStackTrace();
+ 				this.stopping = true;
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/ClientApplication.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/ClientApplication.java
+index df17dac..96d1624 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/ClientApplication.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/ClientApplication.java
+@@ -116,13 +116,13 @@ public class ClientApplication extends Thread implements RemoteClientController,
+ 			this.client = new ClientWindowFrame(this, hubAlias + " - " + this.windowTitle);
+ 			showClient();
+ 			
+-			TeamScreenDaemon.logger.info("Logged in. Sending alias "+hubAlias+" to server.");
++			System.out.println("Logged in. Sending alias "+hubAlias+" to server.");
+ 			HubHelper.writeLine(hubAlias,this.mainConnection.getOutputStream());
+-			TeamScreenDaemon.logger.info("Done.");
++			System.out.println("Done.");
+ 			
+ 			InputStream iStream = this.mainConnection.getInputStream();
+ 	
+-			TeamScreenDaemon.logger.info("Reading key.");
++			System.out.println("Reading key.");
+ 			String targetKey = HubHelper.readLine(iStream);
+ 			if(targetKey.length()==0)
+ 			{
+@@ -149,11 +149,11 @@ public class ClientApplication extends Thread implements RemoteClientController,
+ 	
+ 			//System.out.println("Send Key:"+targetKey);			
+ 			HubHelper.writeLine(targetKey,this.controlConnection.getOutputStream());							
+-			TeamScreenDaemon.logger.info("Key Sent.");
++			System.out.println("Key Sent.");
+ 			
+-			TeamScreenDaemon.logger.info("Sending Full Control request.");
++			System.out.println("Sending Full Control request.");
+ 			HubHelper.writeLine("fullControl",this.controlConnection.getOutputStream());
+-			TeamScreenDaemon.logger.info("Full Control request sent.");
++			System.out.println("Full Control request sent.");
+ 
+ 			this.client.picLabel.addMouseListener(this);
+ 			this.client.picLabel.addMouseMotionListener(this);
+@@ -194,7 +194,7 @@ public class ClientApplication extends Thread implements RemoteClientController,
+ 	{
+ 		if(this.clientRunning==false)
+ 		{
+-			TeamScreenDaemon.logger.info("Client not connected.");
++			System.out.println("Client not connected.");
+ 			return;
+ 		}
+ 		
+@@ -222,7 +222,7 @@ public class ClientApplication extends Thread implements RemoteClientController,
+ 		try{
+ 			this.clientRunning=false;
+ 		}catch(Exception e){}
+-		TeamScreenDaemon.logger.info("Disconnected from Remote Machine");
++		System.out.println("Disconnected from Remote Machine");
+ 	}
+ 
+ 	@Override
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+index 01bf683..2338e33 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+@@ -61,14 +61,13 @@ public class DynamicJRCServerApplication extends Thread {
+ 				public void run() {
+ 					while(threadRunning) {
+ 						try {
+-							window = WindowUtil.updateWindow(window);
++							window = TeamScreenDaemon.getWindowManager().updateWindow(window);
+ 							if(screenRecorder != null)
+ 								screenRecorder.updateWindow(window);
+ 							if(controlAdapter != null)
+ 								controlAdapter.updateWindow(window);
+-						} catch (WindowNotFoundException e) {
+-							//e.printStackTrace();
+-							break;
++						} catch (com.aptitekk.TeamScreen.JNA.WindowManager.WindowNotFoundException e) {
++							e.printStackTrace();
+ 						}
+ 					}
+ 					instance.interrupt();
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index 1c58854..91de902 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -61,7 +61,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 	public static PushSelect pSelect;
+ 	public static WindowInfo windowPushed;
+ 	
+-	WindowManager wManager;
++	static WindowManager wManager;
+ 	
+ 	/**
+ 	 * Start up here
+@@ -315,7 +315,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+         });
+ 	}
+ 	
+-	public WindowManager getWindowManager() {
++	public static WindowManager getWindowManager() {
+ 		return wManager;
+ 	}
+ 
+-- 
+2.39.5 (Apple Git-154)
+

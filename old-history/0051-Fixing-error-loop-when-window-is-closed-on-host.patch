@@ -1,0 +1,24 @@
+From 4724b6ba17c59a5ced934ab69424c3e013f9bcf7 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 28 May 2014 15:22:13 -0600
+Subject: [PATCH 051/101] Fixing error loop when window is closed on host
+
+---
+ .../aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+index 2338e33..260e748 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+@@ -68,6 +68,7 @@ public class DynamicJRCServerApplication extends Thread {
+ 								controlAdapter.updateWindow(window);
+ 						} catch (com.aptitekk.TeamScreen.JNA.WindowManager.WindowNotFoundException e) {
+ 							e.printStackTrace();
++							break;
+ 						}
+ 					}
+ 					instance.interrupt();
+-- 
+2.39.5 (Apple Git-154)
+

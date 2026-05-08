@@ -1,0 +1,179 @@
+From 68c522611b424b9a973ae6f5f6dab1b730a7bb6f Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 4 May 2014 21:02:13 -0600
+Subject: [PATCH 045/101] Did more work on JNeighborDisplayPanel and added
+ "Push Window" tray btn
+
+Signed-off-by: Kevin Thorne <kevint@aptitekk.com>
+---
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java | 24 ++++---
+ .../TeamScreen/Window/Util/JArrowButton.java  |  2 +-
+ .../Window/Util/JNeighborDisplayPanel.java    | 72 +++++++++++++++++++
+ 3 files changed, 88 insertions(+), 10 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index 01b5c1e..ee2ec49 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -152,12 +152,14 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+          
+         // Create a popup menu components
+         MenuItem openItem = new MenuItem("Open");
++        MenuItem pushItem = new MenuItem("Push Window");
+         MenuItem aboutItem = new MenuItem("About");
+         MenuItem exitItem = new MenuItem("Exit");
+          
+         //Add components to popup menu
+         popup.add(openItem);
+         popup.addSeparator();
++        popup.add(pushItem);
+         popup.addSeparator();
+         popup.add(aboutItem);
+         popup.add(exitItem);
+@@ -173,15 +175,6 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+             }
+         });
+          
+-        aboutItem.addActionListener(new ActionListener() {
+-            @Override
+-			public void actionPerformed(ActionEvent e) {
+-                JOptionPane.showMessageDialog(null,
+-                        "TeamScreen\n"+
+-                		"Copyright 2014 AptiTekk LLC");
+-            }
+-        });
+-         
+         ActionListener listener = new ActionListener() {
+             @Override
+ 			public void actionPerformed(ActionEvent e) {
+@@ -195,12 +188,25 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+                         }
+                     });
+                      
++                } else if ("Push Window".equals(item.getLabel())) {
++                	SwingUtilities.invokeLater(new Runnable() {
++    		            @Override
++    		            public void run() {
++    		                wSelect = new WindowSelect(TSDaemon);
++    		                wSelect.setVisible(true);
++    		            }
++    		        });
++                } else if ("About".equals(item.getLabel())) {
++                	JOptionPane.showMessageDialog(null,
++                            "TeamScreen\n"+
++                    		"Copyright 2014 AptiTekk LLC");
+                 }
+             }
+         };
+          
+         openItem.addActionListener(listener);
+         aboutItem.addActionListener(listener);
++        pushItem.addActionListener(listener);
+          
+         exitItem.addActionListener(new ActionListener() {
+             @Override
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JArrowButton.java b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JArrowButton.java
+index 1196a75..7d506cb 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JArrowButton.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JArrowButton.java
+@@ -30,7 +30,7 @@ public class JArrowButton extends JButton{
+ 		
+ 	}
+ 	
+-	private static ImageIcon getImagefromDirection(int direction) {
++	static ImageIcon getImagefromDirection(int direction) {
+ 		if(direction == NORTH) {
+ 			return new ImageIcon(FolderManager.createImage("/images/arrownorth.png", "north arrow"));
+ 		} else if (direction == SOUTH) {
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JNeighborDisplayPanel.java b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JNeighborDisplayPanel.java
+index 5b01efe..40415e2 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JNeighborDisplayPanel.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JNeighborDisplayPanel.java
+@@ -1,6 +1,16 @@
+ package com.aptitekk.TeamScreen.Window.Util;
+ 
++import java.io.IOException;
++import java.net.InetAddress;
++
++import javax.swing.BoxLayout;
++import javax.swing.ImageIcon;
++import javax.swing.JLabel;
+ import javax.swing.JPanel;
++import javax.swing.table.DefaultTableModel;
++
++import com.aptitekk.TeamScreen.FolderManager;
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
+ 
+ /**
+  * Displays the 5 neighbors in what you see in the properties file.
+@@ -11,5 +21,67 @@ import javax.swing.JPanel;
+ public class JNeighborDisplayPanel extends JPanel{
+ 	
+ 	//private String 
++	
++	public static DefaultTableModel getTableData() {
++		try {
++			String rightData = TeamScreenDaemon.properties.getConfig().getProperty("RNeighbor");
++			String leftData = TeamScreenDaemon.properties.getConfig().getProperty("LNeighbor");
++			String topData = TeamScreenDaemon.properties.getConfig().getProperty("TNeighbor");
++			String bottomData = TeamScreenDaemon.properties.getConfig().getProperty("BNeighbor");
++			String projectorData = TeamScreenDaemon.properties.getConfig().getProperty("PNeighbor");
++			String centerData = InetAddress.getLocalHost().getHostName();
++			
++			ImageIcon rightPicture = JArrowButton.getImagefromDirection(JArrowButton.EAST);
++			ImageIcon leftPicture = JArrowButton.getImagefromDirection(JArrowButton.WEST);
++			ImageIcon topPicture = JArrowButton.getImagefromDirection(JArrowButton.NORTH);
++			ImageIcon bottomPicture = JArrowButton.getImagefromDirection(JArrowButton.SOUTH);
++			ImageIcon projectorPicture = JArrowButton.getImagefromDirection(JArrowButton.SPECIAL);
++			ImageIcon centerPicture = new ImageIcon(FolderManager.createImage("/images/computer.png", "computer"));
++			
++			JPanel rightPane = new JPanel();
++			rightPane.setLayout(new BoxLayout(rightPane, BoxLayout.PAGE_AXIS));
++			rightPane.add(new JLabel(rightPicture));
++			rightPane.add(new JLabel(rightData));
++			
++			JPanel leftPane = new JPanel();
++			leftPane.setLayout(new BoxLayout(leftPane, BoxLayout.PAGE_AXIS));
++			leftPane.add(new JLabel(leftPicture));
++			leftPane.add(new JLabel(leftData));
++			
++			JPanel topPane = new JPanel();
++			topPane.setLayout(new BoxLayout(topPane, BoxLayout.PAGE_AXIS));
++			topPane.add(new JLabel(topPicture));
++			topPane.add(new JLabel(topData));
++			
++			JPanel bottomPane = new JPanel();
++			bottomPane.setLayout(new BoxLayout(bottomPane, BoxLayout.PAGE_AXIS));
++			bottomPane.add(new JLabel(bottomPicture));
++			bottomPane.add(new JLabel(bottomData));
++			
++			JPanel projectorPane = new JPanel();
++			projectorPane.setLayout(new BoxLayout(projectorPane, BoxLayout.PAGE_AXIS));
++			projectorPane.add(new JLabel(projectorPicture));
++			projectorPane.add(new JLabel(projectorData));
++			
++			JPanel centerPane = new JPanel();
++			centerPane.setLayout(new BoxLayout(centerPane, BoxLayout.PAGE_AXIS));
++			centerPane.add(new JLabel(centerPicture));
++			centerPane.add(new JLabel(centerData));
++			
++			Object[][] data = {
++					{projectorPane, topPane, ""}, 
++					{leftPane, centerPane, rightPane},
++					{"", bottomPane, ""}
++			};
++			
++			return new DefaultTableModel(data, new String[]{"1","2","3"});
++		} catch (IOException e) {
++			e.printStackTrace();
++			return new DefaultTableModel(null, new String[]{"1","2","3"});
++		}
++		
++		
++		
++	}
+ 
+ }
+-- 
+2.39.5 (Apple Git-154)
+

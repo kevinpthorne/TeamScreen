@@ -1,0 +1,532 @@
+From fd47d3770364fb383afb9e672f785217a51fefb4 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Thu, 5 Nov 2015 21:22:59 -0700
+Subject: [PATCH 098/101] Lots of cleanup
+
+---
+ .../TeamScreen/Frames/Util/JArrowButton.java  |  12 +-
+ .../Net/Broker/TeamScreenBrokerThread.java    | 143 ++++++------
+ .../Net/Listeners/PacketListener.java         |   5 +-
+ .../aptitekk/TeamScreen/Net/NetHandler.java   | 215 +++++++++---------
+ 4 files changed, 187 insertions(+), 188 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/Util/JArrowButton.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/Util/JArrowButton.java
+index 3c4ec83..23092d3 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/Util/JArrowButton.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/Util/JArrowButton.java
+@@ -14,12 +14,12 @@ import com.aptitekk.TeamScreen.FolderManager;
+  */
+ public class JArrowButton extends JButton{
+ 	
+-	public static int SPECIAL = 0;
+-	public static int NORTH = 1;
+-	public static int SOUTH = 2;
+-	public static int EAST = 3;
+-	public static int WEST = 4;
+-	public static int X = 5;
++	public static final int SPECIAL = 0;
++	public static final int NORTH = 1;
++	public static final int SOUTH = 2;
++	public static final int EAST = 3;
++	public static final int WEST = 4;
++	public static final int X = 5;
+ 	
+ 	public JArrowButton(int direction) {
+ 		super(getImagefromDirection(direction));
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broker/TeamScreenBrokerThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broker/TeamScreenBrokerThread.java
+index 9321921..21edb7a 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broker/TeamScreenBrokerThread.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broker/TeamScreenBrokerThread.java
+@@ -1,71 +1,72 @@
+-package com.aptitekk.TeamScreen.Net.Broker;
+-
+-import java.io.BufferedReader;
+-import java.io.DataOutputStream;
+-import java.io.IOException;
+-import java.io.InputStreamReader;
+-import java.net.InetAddress;
+-import java.net.InetSocketAddress;
+-import java.net.Socket;
+-import java.net.SocketAddress;
+-import java.net.SocketTimeoutException;
+-
+-import javax.swing.JOptionPane;
+-
+-import com.aptitekk.TeamScreen.TeamScreenDaemon;
+-import com.aptitekk.TeamScreen.Net.NetHandler;
+-
+-/**
+- * Sends packets
+- *
+- * @author kevint.
+- *         Created Apr 6, 2014.
+- */
+-public class TeamScreenBrokerThread extends Thread{
+-
+-	NetHandler master;
+-	String toSend;
+-	InetAddress address;
+-	boolean enabled = true;
+-
+-	public TeamScreenBrokerThread(NetHandler master, String toSend, InetAddress address) {
+-		super("TeamScreenBrokerThread");
+-		this.toSend = toSend;
+-		this.address = address;
+-		this.master = master;
+-	}
+-
+-	@Override
+-	public void run() {
+-		try {
+-			SocketAddress saddress = new InetSocketAddress(this.address, 25005);
+-			Socket clientSocket = new Socket();
+-			clientSocket.connect(saddress, 20000);
+-			while(enabled) {
+-				DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
+-				BufferedReader inFromServer = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+-				outToServer.writeBytes(this.toSend + "\r\n");
+-				System.out.println("Sent: " + this.toSend);
+-				String receivedPacket = inFromServer.readLine();
+-				System.out.println("Received: " + receivedPacket);
+-				String toReturn = this.master.getProcessor().onPacketReceived(receivedPacket)+ "\r\n";
+-				System.out.println("Returned: " + toReturn);
+-				outToServer.writeBytes(toReturn);
+-				clientSocket.close();
+-				enabled = false;
+-			}
+-			this.interrupt();
+-		} catch (SocketTimeoutException exception) {
+-			exception.printStackTrace();
+-			JOptionPane.showMessageDialog(null,
+-				    "TeamScreen couldn't connect to the neighbor you wanted to share with.\nPlease make sure that:"+
+-				    		"\n\r1. The machine is on\n\r2. They possess the same IP address that is in your settings\n\r"+
+-				    		"3. Double-check that TeamScreen is running",
+-				    "Could not connect",
+-				    JOptionPane.ERROR_MESSAGE);
+-		} catch (IOException exception) {
+-			exception.printStackTrace();
+-		} 
+-	}
+-
+-}
++package com.aptitekk.TeamScreen.Net.Broker;
++
++import java.io.BufferedReader;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.io.InputStreamReader;
++import java.net.InetAddress;
++import java.net.InetSocketAddress;
++import java.net.Socket;
++import java.net.SocketAddress;
++import java.net.SocketTimeoutException;
++
++import javax.swing.JOptionPane;
++
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++import com.aptitekk.TeamScreen.Net.NetHandler;
++
++/**
++ * Sends packets
++ *
++ * @author kevint.
++ *         Created Apr 6, 2014.
++ */
++public class TeamScreenBrokerThread extends Thread{
++
++	NetHandler master;
++	String toSend;
++	InetAddress address;
++	boolean enabled = true;
++
++	public TeamScreenBrokerThread(NetHandler master, String toSend, InetAddress address) {
++		super("TeamScreenBrokerThread");
++		this.toSend = toSend;
++		this.address = address;
++		this.master = master;
++	}
++
++	@Override
++	public void run() {
++		try {
++			SocketAddress saddress = new InetSocketAddress(this.address, 25005);
++			Socket clientSocket = new Socket();
++			clientSocket.connect(saddress, 20000);
++			while(enabled) {
++				DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
++				BufferedReader inFromServer = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
++				outToServer.writeBytes(this.toSend + "\r\n");
++				System.out.println("Sent: " + this.toSend);
++				String receivedPacket = inFromServer.readLine();
++				System.out.println("Received: " + receivedPacket);
++				String toReturn = this.master.getProcessor().onPacketReceived(receivedPacket)+ "\r\n";
++				System.out.println("Returned: " + toReturn);
++				outToServer.writeBytes(toReturn);
++				clientSocket.close();
++				enabled = false;
++			}
++		} catch (SocketTimeoutException exception) {
++			exception.printStackTrace();
++			JOptionPane.showMessageDialog(null,
++				    "TeamScreen couldn't connect to the neighbor you wanted to share with.\nPlease make sure that:"+
++				    		"\n\r1. The machine is on\n\r2. They possess the same IP address that is in your settings\n\r"+
++				    		"3. Double-check that TeamScreen is running",
++				    "Could not connect",
++				    JOptionPane.ERROR_MESSAGE);
++		} catch (IOException exception) {
++			exception.printStackTrace();
++		} 
++		this.interrupt();
++		System.gc();
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
+index 8fb3c72..dfbd9e5 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
+@@ -64,9 +64,10 @@ public class PacketListener extends Thread{
+ 				
+ 				toSend = this.master.getProcessor().onPacketReceived(clientPacket);
+ 				if(toSend == null) {
+-					System.out.println("Null packet to send :(");
++					System.out.println("Transitioning...");
+ 					this.stopping = true;
+ 					this.interrupt();
++					System.gc();
+ 					break;
+ 				}
+ 				
+@@ -85,6 +86,8 @@ public class PacketListener extends Thread{
+ 				this.stopping = true;
+ 				this.interrupt();
+ 			}
++			this.interrupt();
++			System.gc();
+ 		}
+ 	}
+ 	
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
+index c299d67..6a9112a 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
+@@ -18,17 +18,15 @@ import com.aptitekk.TeamScreen.Net.jrc.DynamicJRCServerApplication;
+ import com.aptitekk.TeamScreen.Net.jrc.ClientApplication;
+ import com.aptitekk.TeamScreen.Util.WindowInfo;
+ 
+-
+ /**
+  * Manages the network framework of the ClassManager
+  *
+- * @author kevint.
+- *         Created Feb 13, 2014.
++ * @author kevint. Created Feb 13, 2014.
+  */
+ public class NetHandler {
+-	
++
+ 	public static String PACKET_SEPARATOR_CONSTANT = "~";
+-	
++
+ 	TeamScreenDaemon parent;
+ 	private ServerSocket serverSocket;
+ 	private ListenerHandler listenerHandler;
+@@ -37,42 +35,39 @@ public class NetHandler {
+ 	protected ArrayList<TeamScreenBrokerThread> brokerThreads = new ArrayList<TeamScreenBrokerThread>();
+ 	protected ArrayList<DynamicJRCServerApplication> jrcServerThreads = new ArrayList<DynamicJRCServerApplication>();
+ 	protected ArrayList<ClientApplication> jrcClientThreads = new ArrayList<ClientApplication>();
+-	
++
+ 	public NetHandler(TeamScreenDaemon parent) {
+ 		this.parent = parent;
+-		
++
+ 		this.packetProcessor = new PacketProcessor(this);
+ 		this.broadcastThread = new TeamScreenBroadcastThread(this);
+-		
++
+ 		enable();
+ 	}
+-	
++
+ 	public void enable() {
+ 		startBroadcaster();
+ 		startnewListener(25005);
+-		
++
+ 	}
+-	
++
+ 	public void disable() {
+ 		stopListeners();
+ 		stopBroadcaster();
+ 	}
+-	
+-	public void startnewListener(int port) 
+-	{
++
++	public void startnewListener(int port) {
+ 		TeamScreenDaemon.logger.info("Started listening on port " + port);
+ 		this.listenerHandler = new ListenerHandler(this, port);
+ 		listenerHandler.start();
+ 	}
+-	
++
+ 	public PacketProcessor getProcessor() {
+ 		return this.packetProcessor;
+ 	}
+-	
+-	public void stopListeners()
+-	{
+-		for(PacketListener l:listenerHandler.listenerList)
+-		{
++
++	public void stopListeners() {
++		for (PacketListener l : listenerHandler.listenerList) {
+ 			l.stopping = true;
+ 			l.interrupt();
+ 		}
+@@ -81,150 +76,150 @@ public class NetHandler {
+ 		} catch (IOException e) {
+ 		}
+ 	}
+-	
++
+ 	public void startBroadcaster() {
+ 		try {
+ 			this.broadcastThread.start();
+-		}
+-		catch (IllegalThreadStateException e) {
++		} catch (IllegalThreadStateException e) {
+ 			this.broadcastThread = null;
+ 			this.broadcastThread = new TeamScreenBroadcastThread(this);
+ 			this.broadcastThread.start();
+ 		}
+ 	}
++
+ 	public void stopBroadcaster() {
+ 		try {
+ 			this.broadcastThread.interrupt();
+ 		} catch (Exception e) {
+-			TeamScreenDaemon.logger.warning("Broadcaster was either unable to be stopped, or doesn't exist. Caused by: " + e.getCause());
++			TeamScreenDaemon.logger
++					.warning("Broadcaster was either unable to be stopped, or doesn't exist. Caused by: "
++							+ e.getCause());
+ 		}
+ 	}
+-	
++
+ 	public ArrayList<PacketListener> getListeners() {
+ 		return this.listenerHandler.listenerList;
+ 	}
+-	
++
+ 	public void sendPacket(String toSend, InetAddress address) {
+-		TeamScreenBrokerThread t = new TeamScreenBrokerThread(this, toSend, address);
++		TeamScreenBrokerThread t = new TeamScreenBrokerThread(this, toSend,
++				address);
+ 		t.start();
+ 	}
+-	
++
+ 	public void requestConnecttoNeighbor(int direction) {
+ 		try {
+-			Properties prop = TeamScreenDaemon.getPropertiesHandler().getConfig();
+-			if(direction == JArrowButton.NORTH) {
+-				if(!prop.getProperty("TNeighbor").equals("")) {
+-					// [name]:[IP]:[slot]
+-					String[] info = prop.getProperty("TNeighbor").split(":");
+-					if(info.length != 3) {
+-						return;
+-					} else {
+-						sendPacket("request", InetAddress.getByName(info[1]));
+-					}
++			Properties prop = TeamScreenDaemon.getPropertiesHandler()
++					.getConfig();
++
++			// [name]:[IP]:[slot]
++			String[] info;
++
++			switch (direction) {
++			case JArrowButton.NORTH:
++				if (!prop.getProperty("TNeighbor").equals("")) {
++					info = prop.getProperty("TNeighbor").split(":");
++					break;
+ 				}
+-			}else if(direction == JArrowButton.SOUTH) {
+-				if(!prop.getProperty("BNeighbor").equals("")) {
+-					// [name]:[IP]:[slot]
+-					String[] info = prop.getProperty("BNeighbor").split(":");
+-					if(info.length != 3) {
+-						return;
+-					} else {
+-						sendPacket("request", InetAddress.getByName(info[1]));
+-					}
++				return;
++			case JArrowButton.SOUTH:
++				if (!prop.getProperty("BNeighbor").equals("")) {
++					info = prop.getProperty("BNeighbor").split(":");
++					break;
+ 				}
+-			}else if(direction == JArrowButton.WEST) {
+-				if(!prop.getProperty("LNeighbor").equals("")) {
+-					// [name]:[IP]:[slot]
+-					String[] info = prop.getProperty("LNeighbor").split(":");
+-					if(info.length != 3) {
+-						return;
+-					} else {
+-						sendPacket("request", InetAddress.getByName(info[1]));
+-					}
++				return;
++			case JArrowButton.WEST:
++				if (!prop.getProperty("LNeighbor").equals("")) {
++					info = prop.getProperty("LNeighbor").split(":");
++					break;
+ 				}
+-			}else if(direction == JArrowButton.EAST) {
+-				if(!prop.getProperty("RNeighbor").equals("")) {
+-					// [name]:[IP]:[slot]
+-					String[] info = prop.getProperty("RNeighbor").split(":");
+-					if(info.length != 3) {
+-						return;
+-					} else {
+-						sendPacket("request", InetAddress.getByName(info[1]));
+-					}
++				return;
++			case JArrowButton.EAST:
++				if (!prop.getProperty("RNeighbor").equals("")) {
++					info = prop.getProperty("RNeighbor").split(":");
++					break;
+ 				}
+-			}else if(direction == JArrowButton.SPECIAL) {
+-				if(!prop.getProperty("PNeighbor").equals("")) {
+-					// [name]:[IP]:[slot]
+-					String[] info = prop.getProperty("PNeighbor").split(":");
+-					if(info.length != 3) {
+-						return;
+-					} else {
+-						sendPacket("request", InetAddress.getByName(info[1]));
+-					}
++				return;
++			case JArrowButton.SPECIAL:
++				if (!prop.getProperty("PNeighbor").equals("")) {
++					info = prop.getProperty("PNeighbor").split(":");
++					break;
+ 				}
+-			} else {
++				return;
++			default:
+ 				return;
+ 			}
++			if (info.length != 3) {
++				return;
++			} else {
++				sendPacket("request", InetAddress.getByName(info[1]));
++			}
+ 		} catch (Exception e) {
+ 			e.printStackTrace();
+ 		}
+ 	}
+-	
++
+ 	public String getStackTrace(Throwable t) {
+-        StringWriter stringWritter = new StringWriter();
+-        PrintWriter printWritter = new PrintWriter(stringWritter, true);
+-        t.printStackTrace(printWritter);
+-        printWritter.flush();
+-        stringWritter.flush(); 
+-
+-       return stringWritter.toString();
+-    } 
+-	
++		StringWriter stringWritter = new StringWriter();
++		PrintWriter printWritter = new PrintWriter(stringWritter, true);
++		t.printStackTrace(printWritter);
++		printWritter.flush();
++		stringWritter.flush();
++
++		return stringWritter.toString();
++	}
++
+ 	public void startNewJRCServer(WindowInfo w) {
+ 		DynamicJRCServerApplication t = new DynamicJRCServerApplication(w);
+ 		this.jrcServerThreads.add(t);
+ 		t.start();
+ 	}
++
+ 	public void stopJRCServers() {
+-		for(DynamicJRCServerApplication t : this.jrcServerThreads) {
++		for (DynamicJRCServerApplication t : this.jrcServerThreads) {
+ 			t.interrupt();
+ 			this.jrcServerThreads.remove(t);
+ 		}
++		System.gc();
+ 	}
++
+ 	public void startNewJRCClient(String address, int port, String windowTitle) {
+ 		ClientApplication t = new ClientApplication(address, port, windowTitle);
+ 		this.jrcClientThreads.add(t);
+ 		t.start();
+ 	}
++
+ 	public void stopJRCClients() {
+-		for(ClientApplication t : this.jrcClientThreads) {
++		for (ClientApplication t : this.jrcClientThreads) {
+ 			t.interrupt();
+ 			this.jrcClientThreads.remove(t);
+ 		}
++		System.gc();
+ 	}
+-	
++
+ 	public static boolean validateIP(String ipAddress) {
+-		if (ipAddress.matches("^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})$")) {
+-            String[] groups = ipAddress.split("\\.");
+-
+-            for (int i = 0; i <= 3; i++) {
+-                String segment = groups[i];
+-                if (segment == null || segment.length() <= 0) {
+-                    return false;
+-                }
+-
+-                int value = 0;
+-                try {
+-                    value = Integer.parseInt(segment);
+-                } catch (NumberFormatException e) {
+-                    return false;
+-                }
+-                if (value > 255) {
+-                    return false;
+-                }
+-            }
+-            return true;
+-        }
+-        return false;
++		if (ipAddress
++				.matches("^(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})$")) {
++			String[] groups = ipAddress.split("\\.");
++
++			for (int i = 0; i <= 3; i++) {
++				String segment = groups[i];
++				if (segment == null || segment.length() <= 0) {
++					return false;
++				}
++
++				int value = 0;
++				try {
++					value = Integer.parseInt(segment);
++				} catch (NumberFormatException e) {
++					return false;
++				}
++				if (value > 255) {
++					return false;
++				}
++			}
++			return true;
++		}
++		return false;
+ 	}
+ }
+-- 
+2.39.5 (Apple Git-154)
+

@@ -1,0 +1,27 @@
+From c3db584667d0440ac5fe4e8d872a22f83d3ad3af Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Mon, 7 Apr 2014 16:56:53 -0600
+Subject: [PATCH 029/101] Fixed argument error on startNewJRCClient
+
+---
+ TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
+index 5ad0996..d385b8c 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
+@@ -263,8 +263,8 @@ public class NetHandler {
+ 			this.jrcServerThreads.remove(t);
+ 		}
+ 	}
+-	public void startNewJRCClient(String address, int port) {
+-		JRCClient t = new JRCClient(address, port);
++	public void startNewJRCClient(String address, int port, String windowTitle) {
++		JRCClient t = new JRCClient(address, port, windowTitle);
+ 		this.jrcClientThreads.add(t);
+ 		t.start();
+ 	}
+-- 
+2.39.5 (Apple Git-154)
+

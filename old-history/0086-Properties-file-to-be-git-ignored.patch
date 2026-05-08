@@ -1,0 +1,46 @@
+From 1025270478d9fd8124aa76d69c33b6b683efb32a Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 30 Jul 2014 19:47:56 -0600
+Subject: [PATCH 086/101] Properties file to be git ignored
+
+---
+ TeamScreen/TeamScreen.properties | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/TeamScreen/TeamScreen.properties b/TeamScreen/TeamScreen.properties
+index 3d388b1..6988587 100644
+--- a/TeamScreen/TeamScreen.properties
++++ b/TeamScreen/TeamScreen.properties
+@@ -1,5 +1,5 @@
+ #This is the default properties file.
+-#DO NOT EDIT (Unless you are instructed to do so.)
++#DO NOT EDIT (unless you know what you're doing.
+ #Copyright AptiTekk 2014
+ #-------------GRID------------
+ #|            (P)            |
+@@ -11,18 +11,18 @@
+ #| (BL)       (B)       (BR) |
+ #_____________________________
+ #
+-#Wed Jul 30 19:05:31 MDT 2014
++#Tue Jul 29 17:56:56 MDT 2014
+ BNeighbor=
+ RNeighbor=
+ Slot=A
+-AutoUpdate=true
+ KeyStroke=6
+ KeyStrokeEnd=1
+ PNeighbor=
+ Log=false
+-Name=MITCH-DESKTOP
++Name=LatitudeE7
+ NotificationLevel=warning
+-LNeighbor=
++LNeighbor=Dark8\:172.24.1.177\:A
+ TRNeighbor=
+ TNeighbor=
+ TLNeighbor=
++AutoUpdate=false
+-- 
+2.39.5 (Apple Git-154)
+

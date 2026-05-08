@@ -1,0 +1,61 @@
+From 9df7e5893cdadc98706d7438de368e182e5879dd Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Tue, 22 Jul 2014 10:43:06 -0600
+Subject: [PATCH 056/101] Renamed TSDaemon to instance
+
+---
+ .../src/com/aptitekk/TeamScreen/TeamScreenDaemon.java  | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index b3b88c6..cb4f12e 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -60,7 +60,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 	
+ 	static MainFrame frame;
+ 	static JFrame sframe;
+-	TeamScreenDaemon TSDaemon = null;
++	TeamScreenDaemon instance = null;
+ 	static boolean enabled = true;
+ 	static WindowSelect wSelect;
+ 	static PushSelect pSelect;
+@@ -87,7 +87,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 	}
+ 	
+ 	private TeamScreenDaemon() {
+-		TSDaemon = this;
++		instance = this;
+ 		logger.info("Starting TeamScreen...");
+ 		try{
+ 			properties = new PropertiesHandler();
+@@ -276,7 +276,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 	protected void openMainWindow() {
+     	SwingUtilities.invokeLater(new Runnable() {
+             public void run() {
+-            	frame = new MainFrame(TSDaemon);
++            	frame = new MainFrame(instance);
+ 				frame.setVisible(true);
+             }
+         });
+@@ -345,7 +345,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 		SwingUtilities.invokeLater(new Runnable() {
+             @Override
+             public void run() {
+-                pSelect = new PushSelect(TSDaemon, window);
++                pSelect = new PushSelect(instance, window);
+                 pSelect.setVisible(true);
+                 windowPushed = window;
+             }
+@@ -356,7 +356,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+         SwingUtilities.invokeLater(new Runnable() {
+             @Override
+             public void run() {
+-                wSelect = new WindowSelect(TSDaemon);
++                wSelect = new WindowSelect(instance);
+                 wSelect.setVisible(true);
+             }
+         });
+-- 
+2.39.5 (Apple Git-154)
+

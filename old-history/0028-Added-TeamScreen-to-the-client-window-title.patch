@@ -1,0 +1,25 @@
+From 9d0bc3bfb11651e4abd14036f28e3fd0685bdcf0 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Mon, 7 Apr 2014 16:54:46 -0600
+Subject: [PATCH 028/101] Added "TeamScreen" to the client window title
+
+---
+ .../com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java   | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
+index 321f042..aaa9df0 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
+@@ -27,7 +27,7 @@ public class JRCClientWindowFrame extends JFrame implements RemoteControlClient
+ 	public JRCClientWindowFrame(JRCClient controller, String title) {
+ 		this.controller = controller;
+ 		
+-		this.setTitle(title);
++		this.setTitle(title + " - TeamScreen");
+ 		
+ 		this.viewIcon = new ImageIcon( ImageFactory.loadImage("jar://images/teamscreen.png") );
+ 		
+-- 
+2.39.5 (Apple Git-154)
+

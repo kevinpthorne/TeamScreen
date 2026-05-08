@@ -1,0 +1,240 @@
+From d7601efc2ca72a95c605817bd01d3c3e23c2c6da Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 4 Nov 2015 21:52:10 -0700
+Subject: [PATCH 096/101] Sends and receives new frame dimensions
+
+---
+ .../jrc/Client/DynamicFrameDecompressor.java  | 34 +++++++++++++------
+ .../Net/jrc/Client/DynamicScreenPlayer.java   |  3 +-
+ .../jrc/Server/DynamicFrameCompressor.java    | 12 ++++++-
+ .../Server/DynamicWindowScreenRecorder.java   | 32 +++++------------
+ 4 files changed, 45 insertions(+), 36 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/DynamicFrameDecompressor.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/DynamicFrameDecompressor.java
+index 21acc79..6785a87 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/DynamicFrameDecompressor.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/DynamicFrameDecompressor.java
+@@ -6,6 +6,8 @@ import java.io.IOException;
+ import java.io.InputStream;
+ import java.util.zip.GZIPInputStream;
+ 
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++
+ public class DynamicFrameDecompressor {
+ 	private static final int ALPHA = 0xFF000000;
+ 
+@@ -25,23 +27,27 @@ public class DynamicFrameDecompressor {
+ 
+ 		private InputStream iStream;
+ 		private int[] previousData;
+-		private int result;
++		private int resultedSize;
+ 		private long frameTimeStamp;
+ 		private byte[] packed;
+ 		private int frameSize;
+ 		private int[] newData;
++		private int[] frameDim = new int[2];
+ 
+ 		public int[] getData() {
+ 			return newData;
+ 		}
+ 
+-		public int getResult() {
+-			return result;
++		public int getResultSize() {
++			return resultedSize;
+ 		}
+ 
+ 		public long getTimeStamp() {
+ 			return frameTimeStamp;
+ 		}
++		public int[] getFrameDim() {
++			return frameDim;
++		}
+ 	}
+ 
+ 	public FramePacket frame;
+@@ -80,12 +86,22 @@ public class DynamicFrameDecompressor {
+ 
+ 		if (type <= 0) {
+ 			// frame.newData = frame.previousData;
+-			frame.result = type;
++			frame.resultedSize = type;
+ 			return frame;
+ 		}
+ 		/*
+ 		 * } catch(Exception e) { e.printStackTrace(); }
+ 		 */
++		
++		//GET SIZE
++		int width = frame.iStream.read();
++		width = width << 8;
++		width += frame.iStream.read();
++		frame.getFrameDim()[0] = width;
++		int height = frame.iStream.read();
++		height = height << 8;
++		height += frame.iStream.read();
++		frame.getFrameDim()[1] = height;
+ 
+ 		ByteArrayOutputStream bO = new ByteArrayOutputStream();
+ 		try {
+@@ -101,10 +117,8 @@ public class DynamicFrameDecompressor {
+ 			i = frame.iStream.read();
+ 			zSize += i;
+ 
+-			System.out.println("Zipped Frame size: " + zSize);
+-
+-			if(zSize >= 1000000 || zSize <= 0)
+-				return null;
++			if(TeamScreenDaemon.getVerbose())
++				System.out.println("Zipped Frame size: " + zSize);
+ 			
+ 			byte[] zData = new byte[zSize];
+ 			int readCursor = 0;
+@@ -140,7 +154,7 @@ public class DynamicFrameDecompressor {
+ 			bO.close();
+ 		} catch (Exception e) {
+ 			e.printStackTrace();
+-			frame.result = 0;
++			frame.resultedSize = 0;
+ 			return frame;
+ 		}
+ 
+@@ -243,7 +257,7 @@ public class DynamicFrameDecompressor {
+ 			}
+ 		}
+ 
+-		frame.result = outCursor;
++		frame.resultedSize = outCursor;
+ 	}
+ 
+ }
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/DynamicScreenPlayer.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/DynamicScreenPlayer.java
+index d63997b..1ba8075 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/DynamicScreenPlayer.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/DynamicScreenPlayer.java
+@@ -138,8 +138,9 @@ public class DynamicScreenPlayer implements Runnable{
+ 		DynamicFrameDecompressor.FramePacket frame = decompressor.unpack();
+ 		
+ 		frameTime = frame.getTimeStamp();
++		area = new Rectangle(frame.getFrameDim()[0], frame.getFrameDim()[1]);
+ 		
+-		int result = frame.getResult();
++		int result = frame.getResultSize();
+ 		if( result==0 )
+ 		{
+ 			return;
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicFrameCompressor.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicFrameCompressor.java
+index 13ab861..3e3ef25 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicFrameCompressor.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicFrameCompressor.java
+@@ -49,7 +49,7 @@ public class DynamicFrameCompressor {
+ 		frame = new FramePacket(oStream,frameSize);
+ 	}
+ 	
+-	public void pack( int[] newData,long frameTimeStamp,boolean reset ) throws IOException
++	public void pack( int[] newData,long frameTimeStamp, int width, int height, boolean reset ) throws IOException
+ 	{
+ 		if(frame.previousData.length != newData.length) 
+ 			reset = true;
+@@ -78,6 +78,10 @@ public class DynamicFrameCompressor {
+ 		boolean hasChanges = false;
+ 		boolean lastEntry = false;
+ 		
++		if(newData.length != frame.previousData.length) {
++			hasChanges = true;
++		}
++		
+ 		//System.out.println("Comparing:"+newData+" to "+frame.previousData);
+ 		
+ 		while(inCursor<newData.length)
+@@ -250,6 +254,12 @@ public class DynamicFrameCompressor {
+ 			frame.oStream.flush();
+ 		}
+ 		
++		// SEND SIZE
++		frame.oStream.write((width & 0x0000FF00) >>> 8);
++		frame.oStream.write((width & 0x000000FF));
++		frame.oStream.write((height & 0x0000FF00) >>> 8);
++		frame.oStream.write((height & 0x000000FF));
++		
+ 		ByteArrayOutputStream bO = new ByteArrayOutputStream();
+ 				
+ 		byte[] bA = new byte[0];
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicWindowScreenRecorder.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicWindowScreenRecorder.java
+index dee40e0..68d29ec 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicWindowScreenRecorder.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicWindowScreenRecorder.java
+@@ -50,13 +50,17 @@ public class DynamicWindowScreenRecorder implements Runnable {
+ 	private Thread thread;
+ 
+ 	private class DataPack {
+-		public DataPack(int[] newData, long frameTime) {
++		public DataPack(int[] newData, long frameTime, int width, int height) {
+ 			this.newData = newData;
+ 			this.frameTime = frameTime;
++			this.width = width;
++			this.height = height;
+ 		}
+ 
+ 		public long frameTime;
+ 		public int[] newData;
++		public int width;
++		public int height;
+ 	}
+ 
+ 	private class StreamPacker implements Runnable {
+@@ -84,7 +88,7 @@ public class DynamicWindowScreenRecorder implements Runnable {
+ 				while (queue.isEmpty() == false) {
+ 					DataPack pack = (DataPack) queue.get();
+ 					try {
+-						compressor.pack(pack.newData, pack.frameTime, reset);
++						compressor.pack(pack.newData, pack.frameTime, pack.width, pack.height, reset);
+ 
+ 						if (reset == true) {
+ 							reset = false;
+@@ -183,21 +187,12 @@ public class DynamicWindowScreenRecorder implements Runnable {
+ 
+ 		adjustRecordArea(bImage);
+ 
+-		rawData = new int[frameSize];
+-
+-		try {
+-			bImage.getRGB(0, 0, bImage.getWidth(), bImage.getHeight(), rawData,
+-					0, bImage.getWidth());
+-		} catch (ArrayIndexOutOfBoundsException e) {
+-			resize();
+-			rawData = new int[frameSize];
+-			bImage.getRGB(0, 0, bImage.getWidth(), bImage.getHeight(), rawData,
++		rawData = bImage.getRGB(0, 0, bImage.getWidth(), bImage.getHeight(), null,
+ 					0, bImage.getWidth());
+-		}
+ 		// long t3 = System.currentTimeMillis();
+ 
+ 		// packToStream(rawData,newRawData);
+-		streamPacker.packToStream(new DataPack(rawData, frameTime));
++		streamPacker.packToStream(new DataPack(rawData, frameTime, recordArea.width, recordArea.height));
+ 		// long t4 = System.currentTimeMillis();
+ 
+ 		/*
+@@ -259,17 +254,6 @@ public class DynamicWindowScreenRecorder implements Runnable {
+ 	public void resize() {
+ 		recordArea = this.window.getAbsRectangle();
+ 		frameSize = recordArea.width * recordArea.height;
+-		reset = true;
+-
+-		/*try {
+-			oStream.write((recordArea.width & 0x0000FF00) >>> 8);
+-			oStream.write((recordArea.width & 0x000000FF));
+-
+-			oStream.write((recordArea.height & 0x0000FF00) >>> 8);
+-			oStream.write((recordArea.height & 0x000000FF));
+-		} catch (Exception e) {
+-			e.printStackTrace();
+-		}*/
+ 	}
+ 
+ 	public void startRecording() {
+-- 
+2.39.5 (Apple Git-154)
+

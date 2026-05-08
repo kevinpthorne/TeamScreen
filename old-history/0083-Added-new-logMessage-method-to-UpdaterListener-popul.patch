@@ -1,0 +1,1106 @@
+From 334c227b728f23bdada7640dcc2200c791280345 Mon Sep 17 00:00:00 2001
+From: Mitch Talmadge <mitcht@aptitekk.com>
+Date: Wed, 30 Jul 2014 19:38:11 -0600
+Subject: [PATCH 083/101] Added new logMessage method to UpdaterListener,
+ populated it, including a new LevelEnum class for logging level. Fixed a
+ couple bugs.
+
+---
+ TeamScreen/TeamScreen.properties              |   7 +-
+ .../TeamScreen/AutoUpdater/AutoUpdater.java   | 542 +++++++++---------
+ .../AutoUpdaterDownloadThread.java            | 193 +++----
+ .../AutoUpdater/ChangeLogDialog.java          |  28 +-
+ .../AutoUpdater/DownloadDialog.java           |  31 +-
+ .../TeamScreen/AutoUpdater/LevelEnum.java     |  10 +
+ .../AutoUpdater/UpdaterListener.java          |   8 +-
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java |  23 +-
+ 8 files changed, 424 insertions(+), 418 deletions(-)
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/LevelEnum.java
+
+diff --git a/TeamScreen/TeamScreen.properties b/TeamScreen/TeamScreen.properties
+index cd68aec..3d388b1 100644
+--- a/TeamScreen/TeamScreen.properties
++++ b/TeamScreen/TeamScreen.properties
+@@ -11,16 +11,17 @@
+ #| (BL)       (B)       (BR) |
+ #_____________________________
+ #
+-#Wed Jul 30 03:15:19 MDT 2014
++#Wed Jul 30 19:05:31 MDT 2014
+ BNeighbor=
+ RNeighbor=
+ Slot=A
++AutoUpdate=true
+ KeyStroke=6
+ KeyStrokeEnd=1
+ PNeighbor=
+ Log=false
+-Name=Dark8
+-NotificationLevel=info
++Name=MITCH-DESKTOP
++NotificationLevel=warning
+ LNeighbor=
+ TRNeighbor=
+ TNeighbor=
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
+index d1793e9..f06920e 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
+@@ -13,11 +13,10 @@ import java.net.URISyntaxException;
+ import java.net.URL;
+ import java.net.URLConnection;
+ import java.util.ArrayList;
++import java.util.logging.Level;
+ 
+ import org.apache.commons.io.FileUtils;
+ 
+-import com.aptitekk.TeamScreen.TeamScreenDaemon;
+-
+ /**
+  * AutoUpdater portion of TeamScreen
+  * 
+@@ -26,310 +25,315 @@ import com.aptitekk.TeamScreen.TeamScreenDaemon;
+  */
+ public class AutoUpdater
+ {
+-	/** Static variables that connection to the server requires.
+-	 */
+-	public static final String applicationName = "TeamScreen";
+-
+-	/** Static variables that connection to the server requires.
+-	 */
+-	public static final String updaterURLPrefix = "https://AptiTekk.com/AutoUpdater/V1/";
+-	/** Static variables that connection to the server requires.
+-	 * 
+-	 */
+-	public static final String updaterChangeLogSuffix = "ChangeLogFactory.php";
+-	/**
+-	 * Static variables that connection to the server requires.
+-	 */
+-	public static final String updaterFileTransferSuffix = "FileTransfer.php";
+-	/**
+-	 * Static variables that connection to the server requires.
+-	 */
+-	public static final String updaterVersionFinderSuffix = "VersionFinder.php";
+-	/**
+-	 * Static variables that connection to the server requires.
+-	 */
+-	public static final String updaterHandshakeSuffix = "Handshake.php";
+-
+-	private int currentVersionID;
+-	private String currentVersionName = "0.0_0.0";
+-	private AutoUpdaterDownloadThread autoUpdaterDownloadThread;
+-	private static final Object synchronizedObject = new Object();
+-	private Handshake handShake;
+-	private boolean askUserToUpdate;
+-	public static Image windowIcon;
+-	private static ArrayList<UpdaterListener> updateListeners = new ArrayList<UpdaterListener>();
+-
+-	/**
+-	 * Creates a new AutoUpdater. 
+-	 * @param askUserToUpdate - Display a ChangeLog (true), or skip ChangeLog and download immediately (false)
+-	 * @param windowIcon - The icon file to be displayed in Task Bar.
+-	 */
+-	public AutoUpdater(boolean askUserToUpdate, Image windowIcon)
++    /** Static variables that connection to the server requires.
++     */
++    public static final String applicationName = "TeamScreen";
++    
++    /** Static variables that connection to the server requires.
++     */
++    public static final String updaterURLPrefix = "https://AptiTekk.com/AutoUpdater/V1/";
++    /** Static variables that connection to the server requires.
++     * 
++     */
++    public static final String updaterChangeLogSuffix = "ChangeLogFactory.php";
++    /**
++     * Static variables that connection to the server requires.
++     */
++    public static final String updaterFileTransferSuffix = "FileTransfer.php";
++    /**
++     * Static variables that connection to the server requires.
++     */
++    public static final String updaterVersionFinderSuffix = "VersionFinder.php";
++    /**
++     * Static variables that connection to the server requires.
++     */
++    public static final String updaterHandshakeSuffix = "Handshake.php";
++    
++    private int currentVersionID;
++    private String currentVersionName = "0.0_0.0";
++    private AutoUpdaterDownloadThread autoUpdaterDownloadThread;
++    private static final Object synchronizedObject = new Object();
++    private Handshake handShake;
++    private boolean askUserToUpdate;
++    public static Image windowIcon;
++    private static ArrayList<UpdaterListener> updateListeners = new ArrayList<UpdaterListener>();
++    
++    /**
++     * Creates a new AutoUpdater. 
++     * @param askUserToUpdate - Display a ChangeLog (true), or skip ChangeLog and download immediately (false)
++     * @param windowIcon - The icon file to be displayed in Task Bar.
++     */
++    public AutoUpdater(boolean askUserToUpdate, Image windowIcon)
++    {
++	deleteUpdatesFolder();
++	this.askUserToUpdate = askUserToUpdate;
++	AutoUpdater.windowIcon = windowIcon;
++	System.setProperty("javax.net.ssl.trustStore",getAbsDir()+"/secure/cacerts");
++	System.setProperty("javax.net.ssl.trustStorePassword","CpAhLLp94j");
++	this.loadProperties();
++    }
++    
++    private void loadProperties()
++    {
++	File propFile = new File(getAbsDir()+"/updates.properties");
++	try
+ 	{
+-		deleteUpdatesFolder();
+-		this.askUserToUpdate = askUserToUpdate;
+-		AutoUpdater.windowIcon = windowIcon;
+-		System.setProperty("javax.net.ssl.trustStore",getAbsDir()+"/secure/cacerts");
+-		System.setProperty("javax.net.ssl.trustStorePassword","CpAhLLp94j");
+-		this.loadProperties();
++	    EncryptedProperties prop = new EncryptedProperties("<*d~Pq(E[F8u~m");
++	    if(!propFile.exists())
++	    {
++		FileOutputStream out = new FileOutputStream(propFile);
++		prop.setProperty("currentVersionID", "0");
++		prop.setProperty("currentVersionName", "0.0_0.0");
++		this.currentVersionID = 0;
++		this.currentVersionName = "0.0_0.0";
++		prop.store(out, "Auto Updater Properties File -- DO NOT EDIT.");
++		out.close();
++	    }
++	    else 
++	    {
++		FileInputStream in = new FileInputStream(propFile);
++		prop.load(in);
++		this.currentVersionID = Integer.parseInt(prop.getProperty("currentVersionID"));
++		this.currentVersionName = prop.getProperty("currentVersionName");
++		in.close();
++	    }
+ 	}
+-
+-	private void loadProperties()
++	catch(FileNotFoundException e)
+ 	{
+-		File propFile = new File(getAbsDir()+"/updates.properties");
+-		try
+-		{
+-			EncryptedProperties prop = new EncryptedProperties("<*d~Pq(E[F8u~m");
+-			if(!propFile.exists())
+-			{
+-				FileOutputStream out = new FileOutputStream(propFile);
+-				prop.setProperty("currentVersionID", "0");
+-				prop.setProperty("currentVersionName", "0.0_0.0");
+-				this.currentVersionID = 0;
+-				this.currentVersionName = "0.0_0.0";
+-				prop.store(out, "Auto Updater Properties File -- DO NOT EDIT.");
+-				out.close();
+-			}
+-			else 
+-			{
+-				FileInputStream in = new FileInputStream(propFile);
+-				prop.load(in);
+-				this.currentVersionID = Integer.parseInt(prop.getProperty("currentVersionID"));
+-				this.currentVersionName = prop.getProperty("currentVersionName");
+-				in.close();
+-			}
+-		}
+-		catch(FileNotFoundException e)
+-		{
+-			e.printStackTrace();
+-		}
+-		catch(Exception e)
+-		{
+-			e.printStackTrace();
+-		}
++	    e.printStackTrace();
+ 	}
+-
+-	/**
+-	 * Checks for updates on the server
+-	 */
+-	public void checkForUpdates()
++	catch(Exception e)
+ 	{
+-		TeamScreenDaemon.logger.info("Checking for Updates...");
+-
+-		String POSTData = "currentVersionID=" + currentVersionID + "&modType="
+-				+ AutoUpdater.applicationName;
+-
+-		String result = this.sendPOSTGetString(AutoUpdater.updaterURLPrefix
+-				+ AutoUpdater.updaterVersionFinderSuffix, POSTData);
+-		if(result == null || result.startsWith("ERROR"))
+-		{
+-			System.out.println("Error message received: " + result);
+-			return;
+-		}
+-		else if(result.startsWith("SUCCESS"))
++	    e.printStackTrace();
++	}
++    }
++    
++    /**
++     * Checks for updates on the server
++     */
++    public void checkForUpdates()
++    {
++	logMessage("Checking for Updates...", LevelEnum.INFO);
++	
++	String POSTData = "currentVersionID=" + currentVersionID + "&modType="
++		+ AutoUpdater.applicationName;
++	
++	String result = this.sendPOSTGetString(AutoUpdater.updaterURLPrefix
++		+ AutoUpdater.updaterVersionFinderSuffix, POSTData);
++	if(result == null || result.startsWith("ERROR"))
++	{
++	    System.out.println("Error message received: " + result);
++	    return;
++	}
++	else if(result.startsWith("SUCCESS"))
++	{
++	    int amountToUpdate = Integer.parseInt(result.split(":")[1]);
++	    System.out.println("Amount to Update: " + amountToUpdate);
++	    String changeLog = this.sendPOSTGetString(
++		    AutoUpdater.updaterURLPrefix
++		    + AutoUpdater.updaterChangeLogSuffix, POSTData);
++	    if(!askUserToUpdate || this.askUserToUpdate(changeLog, amountToUpdate))
++	    {
++		System.out.println("AutoUpdater granted permission to update. Generating Handshake...");
++		if(generateHandshake())
+ 		{
+-			int amountToUpdate = Integer.parseInt(result.split(":")[1]);
+-			System.out.println("Amount to Update: " + amountToUpdate);
+-			String changeLog = this.sendPOSTGetString(
+-					AutoUpdater.updaterURLPrefix
+-					+ AutoUpdater.updaterChangeLogSuffix, POSTData);
+-			if(!askUserToUpdate || this.askUserToUpdate(changeLog, amountToUpdate))
++		    System.out.println("Handshake generated. Downloading...");
++		    this.downloadUpdates(amountToUpdate);
++		    synchronized(synchronizedObject)
++		    {
++			try
+ 			{
+-				System.out.println("AutoUpdater granted permission to update. Generating Handshake...");
+-				if(generateHandshake())
+-				{
+-					System.out.println("Handshake generated. Downloading...");
+-					this.downloadUpdates(amountToUpdate);
+-					synchronized(synchronizedObject)
+-					{
+-						try
+-						{
+-							synchronizedObject.wait();
+-							TeamScreenDaemon.displayPopup(TeamScreenDaemon.trayIcon, "TeamScreen Updated!",
+-									"TeamScreen was successfully updated", TrayIcon.MessageType.INFO);
+-							TeamScreenDaemon.logger.info("Update complete.");
+-						}
+-						catch(InterruptedException e)
+-						{
+-						}
+-					}
+-				}
+-				else
+-				{
+-					return;
+-				}
++			    synchronizedObject.wait();
+ 			}
+-			else
++			catch(InterruptedException e)
+ 			{
+-				System.out.println("User said No. Continuing...");
+ 			}
++		    }
+ 		}
+ 		else
+ 		{
+-			TeamScreenDaemon.logger.severe("Could not connect to AutoUpdater. Aborting.\n    (Result was: "
+-					+ result + ")");
++		    return;
+ 		}
++	    }
++	    else
++	    {
++		System.out.println("User said No. Continuing...");
++	    }
+ 	}
+-
+-	private boolean generateHandshake()
++	else
++	{
++	    logMessage("Could not connect to AutoUpdater. Aborting.\n    (Result was: "
++		    + result + ")", LevelEnum.SEVERE);
++	}
++    }
++    
++    private boolean generateHandshake()
++    {
++	String POSTData = "currentVersionID=" + currentVersionID + "&modType="
++		+ AutoUpdater.applicationName;
++	String data = this.sendPOSTGetString(AutoUpdater.updaterURLPrefix
++		+ AutoUpdater.updaterHandshakeSuffix, POSTData);
++	if(data != null && !data.isEmpty())
+ 	{
+-		String POSTData = "currentVersionID=" + currentVersionID + "&modType="
+-				+ AutoUpdater.applicationName;
+-		String data = this.sendPOSTGetString(AutoUpdater.updaterURLPrefix
+-				+ AutoUpdater.updaterHandshakeSuffix, POSTData);
+-		if(data != null && !data.isEmpty())
++	    if(data.contains("SUCCESS"))
++	    {
++		String[] split = data.split(":");
++		if(split.length == 3)
+ 		{
+-			if(data.contains("SUCCESS"))
+-			{
+-				String[] split = data.split(":");
+-				if(split.length == 3)
+-				{
+-					this.handShake = new Handshake(split[1], split[2]);
+-					return true;
+-				}
+-			}
+-			else
+-			{
+-				TeamScreenDaemon.logger.severe("Cannot generate Handshake.\n    (Result was: "
+-						+ data + ")");
+-			}
++		    this.handShake = new Handshake(split[1], split[2]);
++		    return true;
+ 		}
+-		return false;
++	    }
++	    else
++	    {
++		logMessage("Cannot generate Handshake.\n    (Result was: "
++			+ data + ")", LevelEnum.SEVERE);
++	    }
+ 	}
+-
+-	private boolean askUserToUpdate(String changeLog, int amountToUpdate)
++	return false;
++    }
++    
++    private boolean askUserToUpdate(String changeLog, int amountToUpdate)
++    {
++	System.out.println("Asking user to Update...");
++	return new ChangeLogDialog(changeLog, amountToUpdate).askUserToUpdate();
++    }
++    
++    private void downloadUpdates(int amountToUpdate)
++    {
++	new File("updates/").mkdir();
++	logMessage("Downloading Updates...", LevelEnum.INFO);
++	
++	this.autoUpdaterDownloadThread = new AutoUpdaterDownloadThread(
++		this.currentVersionID, amountToUpdate, this.handShake, askUserToUpdate);
++	this.autoUpdaterDownloadThread.start();
++    }
++    
++    private String sendPOSTGetString(String URLString, String POSTData)
++    {
++	URLConnection connection;
++	URL url;
++	try
+ 	{
+-		System.out.println("Asking user to Update...");
+-		return new ChangeLogDialog(changeLog, amountToUpdate).askUserToUpdate();
++	    url = new URL(URLString);
++	    
++	    connection = url.openConnection();
++	    connection.setUseCaches(false);
++	    connection.setConnectTimeout(5000);
++	    connection.setDoOutput(true);
++	    OutputStreamWriter outputStream = new OutputStreamWriter(
++		    connection.getOutputStream());
++	    
++	    outputStream.write(POSTData);
++	    outputStream.flush();
++	    
++	    return URLUtils.getStringFromConnection(connection);
+ 	}
+-
+-	private void downloadUpdates(int amountToUpdate)
++	catch(MalformedURLException e)
+ 	{
+-		new File("updates/").mkdir();
+-		TeamScreenDaemon.logger.info("Downloading Updates...");
+-
+-		this.autoUpdaterDownloadThread = new AutoUpdaterDownloadThread(
+-				this.currentVersionID, amountToUpdate, this.handShake, askUserToUpdate);
+-		this.autoUpdaterDownloadThread.start();
++	    e.printStackTrace();
+ 	}
+-
+-	private String sendPOSTGetString(String URLString, String POSTData)
++	catch(IOException e)
+ 	{
+-		URLConnection connection;
+-		URL url;
+-		try
+-		{
+-			url = new URL(URLString);
+-
+-			connection = url.openConnection();
+-			connection.setUseCaches(false);
+-			connection.setConnectTimeout(5000);
+-			connection.setDoOutput(true);
+-			OutputStreamWriter outputStream = new OutputStreamWriter(
+-					connection.getOutputStream());
+-
+-			outputStream.write(POSTData);
+-			outputStream.flush();
+-
+-			return URLUtils.getStringFromConnection(connection);
+-		}
+-		catch(MalformedURLException e)
+-		{
+-			e.printStackTrace();
+-		}
+-		catch(IOException e)
+-		{
+-			e.printStackTrace();
+-		}
+-		return "ERROR:noConnection";
++	    e.printStackTrace();
+ 	}
+-
+-	/**
+-	 * 
+-	 */
+-	public static void deleteUpdatesFolder()
++	return "ERROR:noConnection";
++    }
++    
++    /**
++     * 
++     */
++    public static void deleteUpdatesFolder()
++    {
++	File updatesFolder = new File(getAbsDir()+"/updates");
++	if(updatesFolder.exists())
+ 	{
+-		File updatesFolder = new File(getAbsDir()+"/updates");
+-		if(updatesFolder.exists())
+-		{
+-			try
+-			{
+-				FileUtils.deleteDirectory(updatesFolder);
+-			}
+-			catch(IOException e)
+-			{
+-				e.printStackTrace();
+-			}
+-		}
+-		File autoUpdater = new File(getAbsDir() + "/AutoUpdater.jar");
+-		if(autoUpdater.exists())
+-			autoUpdater.delete();
++	    try
++	    {
++		FileUtils.deleteDirectory(updatesFolder);
++	    }
++	    catch(IOException e)
++	    {
++		e.printStackTrace();
++	    }
+ 	}
+-
+-	/**
+-	 * @return Current version
+-	 */
+-	public String getCurrentVersionName()
++	File autoUpdater = new File(getAbsDir() + "/AutoUpdater.jar");
++	if(autoUpdater.exists())
++	    autoUpdater.delete();
++    }
++    
++    /**
++     * @return Current version
++     */
++    public String getCurrentVersionName()
++    {
++	return this.currentVersionName;
++    }
++    
++    /**
++     * @return Location of the jar
++     */
++    public static String getAbsDir()
++    {
++	try
+ 	{
+-		return this.currentVersionName;
++	    File abs = new File(AutoUpdater.class.getProtectionDomain()
++		    .getCodeSource().getLocation().toURI().getPath())
++	    .getParentFile().getAbsoluteFile();
++	    return abs.getAbsolutePath();
+ 	}
+-
+-	/**
+-	 * @return Location of the jar
+-	 */
+-	public static String getAbsDir()
++	catch(URISyntaxException e)
+ 	{
+-		try
+-		{
+-			File abs = new File(AutoUpdater.class.getProtectionDomain()
+-					.getCodeSource().getLocation().toURI().getPath())
+-			.getParentFile().getAbsoluteFile();
+-			return abs.getAbsolutePath();
+-		}
+-		catch(URISyntaxException e)
+-		{
+-			return null;
+-		}
++	    return null;
+ 	}
+-
+-	/**
+-	 * @param path
+-	 * @return Internal URL for files inside the jar
+-	 */
+-	public static URL getResourceByPath(String path)
++    }
++    
++    /**
++     * @param path
++     * @return Internal URL for files inside the jar
++     */
++    public static URL getResourceByPath(String path)
++    {
++	return AutoUpdater.class.getResource(path);
++    }
++    
++    /**
++     * Adds an UpdaterListener (For shutting down, etc)
++     * @param listener - The UpdaterListener.
++     */
++    public void addUpdaterListener(UpdaterListener listener)
++    {
++	if(listener != null)
+ 	{
+-		return AutoUpdater.class.getResource(path);
++	    if(listener instanceof UpdaterListener)
++	    {
++		this.updateListeners.add(listener);
++	    }
+ 	}
+-
+-	static void shutDownProgram()
++    }
++    
++    static void haltProgram()
++    {
++	for(UpdaterListener listener : updateListeners)
+ 	{
+-		for(UpdaterListener listener : updateListeners)
+-		{
+-			listener.shutDownProgram();
+-		}
++	    listener.haltProgram();
+ 	}
+-
+-	/**
+-	 * Adds an UpdaterListener (For shutting down, etc)
+-	 * @param listener - The UpdaterListener.
+-	 */
+-	public void addUpdaterListener(UpdaterListener listener)
++    }
++    
++    static void logMessage(String message, LevelEnum level)
++    {
++	for(UpdaterListener listener : updateListeners)
+ 	{
+-		if(listener != null)
+-		{
+-			if(listener instanceof UpdaterListener)
+-			{
+-				this.updateListeners.add(listener);
+-			}
+-		}
++	    listener.logMessage(message, level);
+ 	}
+-
+-	static void notifyObject()
++    }
++    
++    static void notifyObject()
++    {
++	synchronized(synchronizedObject)
+ 	{
+-		synchronized(synchronizedObject)
+-		{
+-			synchronizedObject.notify();
+-		}
++	    synchronizedObject.notify();
+ 	}
+-
++    }
++    
+ }
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
+index 4f6cc8a..6bfb827 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
+@@ -1,122 +1,117 @@
+ package com.aptitekk.TeamScreen.AutoUpdater;
+ 
+-import java.awt.TrayIcon;
+ import java.io.File;
+ import java.io.IOException;
+ import java.io.OutputStreamWriter;
+ import java.net.URL;
+ import java.net.URLConnection;
++import java.util.logging.Level;
+ 
+-import com.aptitekk.TeamScreen.TeamScreenDaemon;
+ 
+ public class AutoUpdaterDownloadThread extends Thread
+ {
+-
+-	private int currentVersionID;
+-	private int amountToUpdate;
+-	private Handshake handShake;
+-	private File autoUpdater;
+-	private boolean showDialog;
+-
+-	public AutoUpdaterDownloadThread(int currentVersionID, int amountToUpdate,
+-			Handshake handShake, boolean showDialog)
++    
++    private int currentVersionID;
++    private int amountToUpdate;
++    private Handshake handShake;
++    private File autoUpdater;
++    private boolean showDialog;
++    
++    public AutoUpdaterDownloadThread(int currentVersionID, int amountToUpdate,
++	    Handshake handShake, boolean showDialog)
++    {
++	this.currentVersionID = currentVersionID;
++	this.amountToUpdate = amountToUpdate;
++	this.handShake = handShake;
++	this.showDialog = showDialog;
++    }
++    
++    @Override
++    public void run()
++    {
++	if(showDialog)
++	    URLUtils.addProgressListener(new DownloadDialog(amountToUpdate+1));
++	try
+ 	{
+-		this.currentVersionID = currentVersionID;
+-		this.amountToUpdate = amountToUpdate;
+-		this.handShake = handShake;
+-		this.showDialog = showDialog;
++	    Thread.sleep(500);
+ 	}
+-
+-	@Override
+-	public void run()
++	catch(InterruptedException e)
+ 	{
+-		if(showDialog)
+-			URLUtils.addProgressListener(new DownloadDialog(amountToUpdate+1));
+-		try
+-		{
+-			Thread.sleep(500);
+-		}
+-		catch(InterruptedException e)
+-		{
+-		}
+-		if(downloadUpdate(-1))
+-		{
+-			for(int i = 1; i <= amountToUpdate; i++)
+-			{
+-				if(!downloadUpdate(currentVersionID + i))
+-					break;
+-			}
+-		}
+ 	}
+-
+-	private boolean downloadUpdate(int versionID)
++	if(downloadUpdate(-1))
+ 	{
+-		String POSTData = "versionID=" + versionID + "&modType="
+-				+ AutoUpdater.applicationName + "&handShake="
+-				+ this.handShake.getHandShakeResult();
+-
+-		URLConnection connection = this.sendPOSTGetConnection(
+-				AutoUpdater.updaterURLPrefix
+-				+ AutoUpdater.updaterFileTransferSuffix, POSTData);
+-
+-		if(connection != null)
++	    for(int i = 1; i <= amountToUpdate; i++)
++	    {
++		if(!downloadUpdate(currentVersionID + i))
++		    break;
++	    }
++	}
++    }
++    
++    private boolean downloadUpdate(int versionID)
++    {
++	String POSTData = "versionID=" + versionID + "&modType="
++		+ AutoUpdater.applicationName + "&handShake="
++		+ this.handShake.getHandShakeResult();
++	
++	URLConnection connection = this.sendPOSTGetConnection(
++		AutoUpdater.updaterURLPrefix
++		+ AutoUpdater.updaterFileTransferSuffix, POSTData);
++	
++	if(connection != null)
++	{
++	    String contentDisposition = connection.getHeaderField("Content-Disposition");
++	    if(contentDisposition == null)
++	    {
++		String result = URLUtils.getStringFromConnection(connection);
++		for(DLProgressListener listener : URLUtils.getProgressListenerList())
+ 		{
+-			String contentDisposition = connection.getHeaderField("Content-Disposition");
+-			if(contentDisposition == null)
+-			{
+-				String result = URLUtils.getStringFromConnection(connection);
+-				for(DLProgressListener listener : URLUtils.getProgressListenerList())
+-				{
+-					listener.downloadFailed("Server-Sided Error.");
+-				}
+-				TeamScreenDaemon.logger.severe("Could not download Version ID " + versionID
+-						+ ".\n    (Result was: " + result + ")");
+-				TeamScreenDaemon.displayPopup(TeamScreenDaemon.trayIcon, "Error downloading updates!",
+-						"Updates could not be downloaded\n"+
+-								"Could not download Version ID " + versionID
+-								+ ".\n    (Result was: " + result + ")", TrayIcon.MessageType.ERROR);
+-				if(!this.showDialog)
+-					AutoUpdater.notifyObject();
+-				return false;
+-			}
+-			String filename = contentDisposition.substring(contentDisposition.indexOf("\"")+1, contentDisposition.lastIndexOf("\""));
+-
+-			File update = URLUtils.getFileFromConnection(connection,
+-					AutoUpdater.getAbsDir() + (versionID == -1 ? "/" : "/updates/") + filename);
+-			if(update == null)
+-				return false;
+-			return true;
++		    listener.downloadFailed("Server-Sided Error.");
+ 		}
++		AutoUpdater.logMessage("Could not download Version ID " + versionID
++			+ ".\n    (Result was: " + result + ")", LevelEnum.SEVERE);
++		if(!showDialog)
++		    AutoUpdater.notifyObject();
++		return false;
++	    }
++	    String filename = contentDisposition.substring(contentDisposition.indexOf("\"")+1, contentDisposition.lastIndexOf("\""));
++	    
++	    File update = URLUtils.getFileFromConnection(connection,
++		    AutoUpdater.getAbsDir() + (versionID == -1 ? "/" : "/updates/") + filename);
++	    if(update == null)
+ 		return false;
++	    return true;
+ 	}
+-
+-	private URLConnection sendPOSTGetConnection(String URLString,
+-			String POSTData)
++	return false;
++    }
++    
++    private URLConnection sendPOSTGetConnection(String URLString,
++	    String POSTData)
++    {
++	URLConnection connection;
++	try
+ 	{
+-		URLConnection connection;
+-		try
+-		{
+-			URL url = new URL(URLString);
+-			connection = url.openConnection();
+-			connection.setConnectTimeout(5000);
+-			connection.setDoOutput(true);
+-			connection.setDoInput(true);
+-			connection.setRequestProperty("User-Agent", "Mozilla/5.0");
+-
+-			OutputStreamWriter outputStream = new OutputStreamWriter(
+-					connection.getOutputStream());
+-
+-			outputStream.write(POSTData);
+-			outputStream.flush();
+-
+-			return connection;
+-
+-		}
+-		catch(IOException e)
+-		{
+-			e.printStackTrace();
+-			return null;
+-		}
++	    URL url = new URL(URLString);
++	    connection = url.openConnection();
++	    connection.setConnectTimeout(5000);
++	    connection.setDoOutput(true);
++	    connection.setDoInput(true);
++	    connection.setRequestProperty("User-Agent", "Mozilla/5.0");
++	    
++	    OutputStreamWriter outputStream = new OutputStreamWriter(
++		    connection.getOutputStream());
++	    
++	    outputStream.write(POSTData);
++	    outputStream.flush();
++	    
++	    return connection;
++	    
+ 	}
+-
++	catch(IOException e)
++	{
++	    e.printStackTrace();
++	    return null;
++	}
++    }
++    
+ }
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/ChangeLogDialog.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/ChangeLogDialog.java
+index 6c6c86b..a666030 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/ChangeLogDialog.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/ChangeLogDialog.java
+@@ -113,7 +113,7 @@ public class ChangeLogDialog extends JFrame implements MouseListener
+ 	mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
+ 	
+ 	JLabel headerLabel = new JLabel();
+-	headerLabel.setIcon(new ImageIcon(AutoUpdater.getResourceByPath("images/ChangeLogDialog/ChangeLogHeader.png")));
++	headerLabel.setIcon(getIconFromPath("images/ChangeLogDialog/ChangeLogHeader.png"));
+ 	
+ 	mainPanel.add(headerLabel);
+ 	
+@@ -133,7 +133,7 @@ public class ChangeLogDialog extends JFrame implements MouseListener
+ 	mainPanel.add(scrollPane);
+ 	
+ 	JLabel downloadNowLabel = new JLabel();
+-	downloadNowLabel.setIcon(new ImageIcon(AutoUpdater.getResourceByPath("images/ChangeLogDialog/InstallNow.png")));
++	downloadNowLabel.setIcon(getIconFromPath("images/ChangeLogDialog/InstallNow.png"));
+ 	
+ 	mainPanel.add(downloadNowLabel);
+ 	
+@@ -178,11 +178,7 @@ public class ChangeLogDialog extends JFrame implements MouseListener
+ 	    URL resource = AutoUpdater.getResourceByPath(path);
+ 	    if(resource == null)
+ 	    {
+-		JOptionPane
+-		.showMessageDialog(
+-			null,
+-			"AutoUpdater could not start. The program may be corrupted.",
+-			"Error", JOptionPane.ERROR_MESSAGE);
++		AutoUpdater.logMessage("AutoUpdater could not start. The program may be corrupted.", LevelEnum.SEVERE);
+ 		userWantsUpdate = false;
+ 		userReplied = true;
+ 		dispose();
+@@ -193,11 +189,7 @@ public class ChangeLogDialog extends JFrame implements MouseListener
+ 	}
+ 	catch(IOException e)
+ 	{
+-	    JOptionPane
+-	    .showMessageDialog(
+-		    null,
+-		    "AutoUpdater could not start. The program may be corrupted.",
+-		    "Error", JOptionPane.ERROR_MESSAGE);
++	    AutoUpdater.logMessage("AutoUpdater could not start. The program may be corrupted.", LevelEnum.SEVERE);
+ 	    userWantsUpdate = false;
+ 	    userReplied = true;
+ 	    dispose();
+@@ -213,11 +205,7 @@ public class ChangeLogDialog extends JFrame implements MouseListener
+ 	    URL resource = AutoUpdater.getResourceByPath(path);
+ 	    if(resource == null)
+ 	    {
+-		JOptionPane
+-		.showMessageDialog(
+-			null,
+-			"AutoUpdater could not start. The program may be corrupted.",
+-			"Error", JOptionPane.ERROR_MESSAGE);
++		AutoUpdater.logMessage("AutoUpdater could not start. The program may be corrupted.", LevelEnum.SEVERE);
+ 		userWantsUpdate = false;
+ 		userReplied = true;
+ 		dispose();
+@@ -230,11 +218,7 @@ public class ChangeLogDialog extends JFrame implements MouseListener
+ 	}
+ 	catch(IOException e)
+ 	{
+-	    JOptionPane
+-	    .showMessageDialog(
+-		    null,
+-		    "AutoUpdater could not start. The program may be corrupted.",
+-		    "Error", JOptionPane.ERROR_MESSAGE);
++	    AutoUpdater.logMessage("AutoUpdater could not start. The program may be corrupted.", LevelEnum.SEVERE);
+ 	    userWantsUpdate = false;
+ 	    userReplied = true;
+ 	    dispose();
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DownloadDialog.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DownloadDialog.java
+index 51f2365..7368e35 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DownloadDialog.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DownloadDialog.java
+@@ -175,11 +175,8 @@ public class DownloadDialog extends JFrame implements DLProgressListener, MouseL
+ 	    URL resource = AutoUpdater.getResourceByPath(path);
+ 	    if(resource == null)
+ 	    {
+-		JOptionPane
+-		.showMessageDialog(
+-			null,
+-			"AutoUpdater could not start. The program may be corrupted.",
+-			"Error", JOptionPane.ERROR_MESSAGE);
++		AutoUpdater.logMessage("AutoUpdater could not start. The program may be corrupted.",
++			LevelEnum.SEVERE);
+ 		canceled = true;
+ 		dispose();
+ 		AutoUpdater.notifyObject();
+@@ -190,11 +187,8 @@ public class DownloadDialog extends JFrame implements DLProgressListener, MouseL
+ 	}
+ 	catch(IOException e)
+ 	{
+-	    JOptionPane
+-	    .showMessageDialog(
+-		    null,
+-		    "AutoUpdater could not start. The program may be corrupted.",
+-		    "Error", JOptionPane.ERROR_MESSAGE);
++	    AutoUpdater.logMessage("AutoUpdater could not start. The program may be corrupted.",
++			LevelEnum.SEVERE);
+ 	    canceled = true;
+ 		dispose();
+ 		AutoUpdater.notifyObject();
+@@ -210,11 +204,8 @@ public class DownloadDialog extends JFrame implements DLProgressListener, MouseL
+ 	    URL resource = AutoUpdater.getResourceByPath(path);
+ 	    if(resource == null)
+ 	    {
+-		JOptionPane
+-		.showMessageDialog(
+-			null,
+-			"AutoUpdater could not start. The program may be corrupted.",
+-			"Error", JOptionPane.ERROR_MESSAGE);
++		AutoUpdater.logMessage("AutoUpdater could not start. The program may be corrupted.",
++			LevelEnum.SEVERE);
+ 		canceled = true;
+ 		dispose();
+ 		AutoUpdater.notifyObject();
+@@ -227,11 +218,8 @@ public class DownloadDialog extends JFrame implements DLProgressListener, MouseL
+ 	}
+ 	catch(IOException e)
+ 	{
+-	    JOptionPane
+-	    .showMessageDialog(
+-		    null,
+-		    "AutoUpdater could not start. The program may be corrupted.",
+-		    "Error", JOptionPane.ERROR_MESSAGE);
++	    AutoUpdater.logMessage("AutoUpdater could not start. The program may be corrupted.",
++			LevelEnum.SEVERE);
+ 	    canceled = true;
+ 		dispose();
+ 		AutoUpdater.notifyObject();
+@@ -275,8 +263,9 @@ public class DownloadDialog extends JFrame implements DLProgressListener, MouseL
+ 	    {
+ 		this.dispose();
+ 		try {
++		    AutoUpdater.haltProgram();
+ 		    new ProcessBuilder("java", "-jar", AutoUpdater.getAbsDir()+"/AutoUpdater.jar", "TeamScreen.jar").start();
+-		    AutoUpdater.shutDownProgram();
++		    System.exit(0);
+ 		} catch (IOException e) {
+ 		    e.printStackTrace();
+ 		    AutoUpdater.notifyObject();
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/LevelEnum.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/LevelEnum.java
+new file mode 100644
+index 0000000..f253ea4
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/LevelEnum.java
+@@ -0,0 +1,10 @@
++package com.aptitekk.TeamScreen.AutoUpdater;
++
++public enum LevelEnum
++{
++    
++    INFO,
++    SEVERE,
++    DEBUG;
++    
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/UpdaterListener.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/UpdaterListener.java
+index c2cc652..dd3a23e 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/UpdaterListener.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/UpdaterListener.java
+@@ -1,11 +1,15 @@
+ package com.aptitekk.TeamScreen.AutoUpdater;
+ 
++
+ public interface UpdaterListener
+ {
+     
+     /**
+-     * Used by the AutoUpdater to shut down the program before opening the installer.
++     * Used by the AutoUpdater to halt the program before opening the installer.
+      * DO NOT CALL SYSTEM.EXIT();
+      */
+-    public void shutDownProgram();
++    public void haltProgram();
++    
++    public void logMessage(String message, LevelEnum level);
++    
+ }
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index 554064f..4a26045 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -22,16 +22,17 @@ import java.util.HashSet;
+ import java.util.Set;
+ import java.util.logging.ConsoleHandler;
+ import java.util.logging.FileHandler;
++import java.util.logging.Level;
+ import java.util.logging.Logger;
+ 
+ import javax.swing.ImageIcon;
+ import javax.swing.JOptionPane;
+ import javax.swing.SwingUtilities;
+ import javax.swing.UIManager;
+-import javax.swing.UnsupportedLookAndFeelException;
+ import javax.swing.border.EmptyBorder;
+ 
+ import com.aptitekk.TeamScreen.AutoUpdater.AutoUpdater;
++import com.aptitekk.TeamScreen.AutoUpdater.LevelEnum;
+ import com.aptitekk.TeamScreen.AutoUpdater.UpdaterListener;
+ import com.aptitekk.TeamScreen.Frames.MainFrame;
+ import com.aptitekk.TeamScreen.Frames.PushSelect;
+@@ -467,7 +468,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 	}
+ 
+ 	@Override
+-	public void shutDownProgram()
++	public void haltProgram()
+ 	{
+ 	    try {
+ 		properties.saveConfig();
+@@ -485,4 +486,22 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 		return TeamScreenDaemon.properties;
+ 	}
+ 
++	@Override
++	public void logMessage(String message, LevelEnum level)
++	{
++	    switch(level) 
++	    {
++		case SEVERE:
++		TeamScreenDaemon.logger.severe(message);
++		TeamScreenDaemon.displayPopup(TeamScreenDaemon.trayIcon, "Error downloading updates!",
++			message, TrayIcon.MessageType.ERROR);
++		break;
++		case INFO:
++		    TeamScreenDaemon.logger.info(message);
++		    break;
++		default:
++		    break;
++	    }
++	}
++
+ }
+-- 
+2.39.5 (Apple Git-154)
+

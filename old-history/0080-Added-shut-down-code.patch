@@ -1,0 +1,34 @@
+From d3fc9d9bcd166417fc81d5ed354e39b37197d8eb Mon Sep 17 00:00:00 2001
+From: Mitch Talmadge <mitcht@aptitekk.com>
+Date: Wed, 30 Jul 2014 19:04:37 -0600
+Subject: [PATCH 080/101] Added shut down code
+
+---
+ .../src/com/aptitekk/TeamScreen/TeamScreenDaemon.java | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index 22f1cb5..554064f 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -469,7 +469,16 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 	@Override
+ 	public void shutDownProgram()
+ 	{
+-		// TODO Shut down without using System.exit();
++	    try {
++		properties.saveConfig();
++		logger.info("Configuration saved succesfully");
++	} catch (IOException e) {
++		e.printStackTrace();
++		logger.severe("Configuration could not be saved");
++	}
++	tray.remove(trayIcon);
++	if(FolderManager.isWindows())
++		JIntellitype.getInstance().cleanUp();
+ 	}
+ 
+ 	public static PropertiesHandler getPropertiesHandler() {
+-- 
+2.39.5 (Apple Git-154)
+

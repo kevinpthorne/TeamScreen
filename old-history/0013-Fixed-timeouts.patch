@@ -1,0 +1,34 @@
+From c543044c51c832694d57cbfe5d45870a9b55b865 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 6 Apr 2014 21:43:12 -0600
+Subject: [PATCH 013/101] Fixed timeouts
+
+---
+ .../com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
+index d377c0e..42208e1 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
+@@ -49,7 +49,7 @@ public class PacketListener extends Thread{
+ 				BufferedReader inFromClient = new BufferedReader(new InputStreamReader(connectionSocket.getInputStream()));
+ 				DataOutputStream outToClient = new DataOutputStream(connectionSocket.getOutputStream());
+ 
+-				connectionSocket.setSoTimeout(2000);
++				connectionSocket.setSoTimeout(20000);
+ 				TeamScreenDaemon.logger.info("Reading from client...");
+ 				String clientPacket = inFromClient.readLine();
+ 				if(clientPacket == null)
+@@ -62,8 +62,6 @@ public class PacketListener extends Thread{
+ 				TeamScreenDaemon.logger.info("Received: " + clientPacket);
+ 				String toSend = "";
+ 				
+-				TeamScreenDaemon.logger.info(clientPacket);
+-				
+ 				toSend = this.master.getProcessor().onPacketReceived(clientPacket);
+ 				if(toSend == null) {
+ 					TeamScreenDaemon.logger.info("Null :(");
+-- 
+2.39.5 (Apple Git-154)
+

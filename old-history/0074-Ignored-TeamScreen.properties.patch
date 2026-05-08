@@ -1,0 +1,19 @@
+From 315b8ef6956d5529f5fa5c8109d9a8567d53be54 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 30 Jul 2014 09:07:29 -0600
+Subject: [PATCH 074/101] Ignored TeamScreen.properties
+
+---
+ TeamScreen/.gitignore | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/TeamScreen/.gitignore b/TeamScreen/.gitignore
+index 5e56e04..d6d0db3 100644
+--- a/TeamScreen/.gitignore
++++ b/TeamScreen/.gitignore
+@@ -1 +1,2 @@
+ /bin
++/TeamScreen.properties
+-- 
+2.39.5 (Apple Git-154)
+

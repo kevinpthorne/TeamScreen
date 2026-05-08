@@ -1,0 +1,97 @@
+From c1c9dafc13e179acef3e7163f68440a5d31d50cb Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Thu, 5 Nov 2015 21:50:41 -0700
+Subject: [PATCH 099/101] Added padding on window renders, cleaned up threads a
+ bit
+
+---
+ .../TeamScreen/JNA/WindowManagers/WindowsNative.java  | 11 +++++++----
+ .../TeamScreen/Net/Listeners/ListenerHandler.java     |  2 ++
+ .../TeamScreen/Net/jrc/Client/ClientWindowFrame.java  |  2 +-
+ .../TeamScreen/Net/jrc/ClientApplication.java         |  8 +-------
+ 4 files changed, 11 insertions(+), 12 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManagers/WindowsNative.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManagers/WindowsNative.java
+index d6ad022..3437748 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManagers/WindowsNative.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManagers/WindowsNative.java
+@@ -27,6 +27,9 @@ import com.sun.jna.win32.StdCallLibrary;
+ import com.sun.jna.win32.W32APIOptions;
+ 
+ public class WindowsNative extends WindowManager {
++	
++	private static final int WIDTH_PADDING = 10;
++	private static final int HEIGHT_PADDING = 10;
+ 
+ 	@Override
+ 	public List<WindowInfo> getWindows() {
+@@ -125,8 +128,8 @@ public class WindowsNative extends WindowManager {
+ 		WinDef.RECT bounds = new WinDef.RECT();
+ 		User32.instance.GetClientRect(hwnd, bounds);
+ 
+-        int width = bounds.right - bounds.left;
+-        int height = bounds.bottom - bounds.top;
++        int width = bounds.right - bounds.left + WIDTH_PADDING;
++        int height = bounds.bottom - bounds.top + HEIGHT_PADDING;
+         
+         return new Rectangle(bounds.top, bounds.left, width, height);
+ 	}
+@@ -141,8 +144,8 @@ public class WindowsNative extends WindowManager {
+ 		WinDef.RECT bounds = new WinDef.RECT();
+ 		User32.instance.GetClientRect(hwnd, bounds);
+ 
+-        int width = bounds.right - bounds.left;
+-        int height = bounds.bottom - bounds.top;
++        int width = bounds.right - bounds.left + WIDTH_PADDING;
++        int height = bounds.bottom - bounds.top + HEIGHT_PADDING;
+ 
+         HBITMAP hBitmap = GDI32.INSTANCE.CreateCompatibleBitmap(hdcWindow, width, height);
+ 
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/ListenerHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/ListenerHandler.java
+index 2bf11cf..b6ac20c 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/ListenerHandler.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/ListenerHandler.java
+@@ -23,6 +23,8 @@ public class ListenerHandler extends Thread{
+ 
+ 	public ListenerHandler(NetHandler netHandler, int port)
+ 	{
++		super("ListenerHandler");
++		setDaemon(true);
+ 		this.listenerList = new ArrayList<PacketListener>();
+ 		this.netHandler = netHandler;
+ 		this.port = port;
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/ClientWindowFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/ClientWindowFrame.java
+index 7a0b20c..d357206 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/ClientWindowFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/ClientWindowFrame.java
+@@ -52,7 +52,7 @@ public class ClientWindowFrame extends JFrame implements RemoteControlClient {
+ 		this.setSize(this.picLabel.getSize().width, this.picLabel.getSize().height+60);
+ 		this.setVisible(true);
+ 		this.pack();
+-		this.setResizable(true);
++		this.setResizable(false);
+ 	}
+ 	
+ 	@Override
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/ClientApplication.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/ClientApplication.java
+index 0366359..d3ab7ca 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/ClientApplication.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/ClientApplication.java
+@@ -92,13 +92,7 @@ public class ClientApplication extends Thread implements RemoteClientController,
+ 		
+ 		this.clientRunning = true;
+ 		
+-		String hubAlias;
+-		try {
+-			hubAlias = TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("Name");
+-		} catch (IOException exception) {
+-			hubAlias = "null";
+-			exception.printStackTrace();
+-		}	
++		String hubAlias = this.address;
+ 		
+ 		try{
+ 			/*if(useTunnel==true)
+-- 
+2.39.5 (Apple Git-154)
+

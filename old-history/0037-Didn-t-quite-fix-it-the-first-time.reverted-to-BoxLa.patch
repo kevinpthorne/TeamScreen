@@ -1,0 +1,41 @@
+From bec8846f492caecc802e919c0770c9eef1dc3d95 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 13 Apr 2014 16:05:30 -0600
+Subject: [PATCH 037/101] Didn't quite fix it the first time....reverted to
+ BoxLayout on JRCWindow
+
+---
+ .../aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java   | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
+index 687de62..400361f 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
+@@ -8,6 +8,7 @@ import java.awt.Image;
+ import java.awt.event.WindowAdapter;
+ import java.awt.event.WindowEvent;
+ 
++import javax.swing.BoxLayout;
+ import javax.swing.ImageIcon;
+ import javax.swing.JFrame;
+ import javax.swing.JLabel;
+@@ -39,13 +40,12 @@ public class JRCClientWindowFrame extends JFrame implements RemoteControlClient
+ 		});
+ 		
+ 		this.setTitle(title + " - TeamScreen");
++		this.setLayout(new BoxLayout(this, BoxLayout.PAGE_AXIS));
+ 		
+ 		this.viewIcon = new ImageIcon( ImageFactory.loadImage("jar://images/teamscreen.png") );
+ 		
+ 		this.picLabel = new JLabel(this.viewIcon);
+-		add(this.picLabel, new GridBagConstraints());
+-		
+-		this.setLayout(new GridBagLayout());
++		add(this.picLabel);
+ 		
+ 		this.setSize(this.picLabel.getSize().width, this.picLabel.getSize().height+60);
+ 		this.setVisible(true);
+-- 
+2.39.5 (Apple Git-154)
+

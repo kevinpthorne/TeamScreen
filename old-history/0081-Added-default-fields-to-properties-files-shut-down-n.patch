@@ -1,0 +1,78 @@
+From b979808dabb7e3030860d8c8d69d0cd7acc17301 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 30 Jul 2014 19:29:43 -0600
+Subject: [PATCH 081/101] Added default fields to properties files, shut down
+ nethandler on exit and shutdownProgram methods
+
+---
+ .../TeamScreen/PropertiesHandler.java         |  2 +-
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java | 26 ++++++++++++-------
+ 2 files changed, 17 insertions(+), 11 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java
+index 56e2348..8e0e09d 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java
+@@ -23,7 +23,7 @@ public class PropertiesHandler {
+ 	
+ 	private static String prop_comments = "This is the default properties file.\n"+
+ 									"DO NOT EDIT (Unless you are instructed to do so.)\n"+
+-									"Copyright AptiTekk 2014\n"+
++									"Copyright Kevin Thorne 2014\n"+
+ 									"-------------GRID------------\n"+
+ 									"|            (P)            |\n"+
+ 									"|                           |\n"+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index 554064f..43598c9 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -259,6 +259,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 		tray.remove(trayIcon);
+ 		if(FolderManager.isWindows())
+ 			JIntellitype.getInstance().cleanUp();
++		this.netHandler.disable();
+ 		System.exit(0);
+ 	}
+ 	public boolean isEnabled() {
+@@ -459,6 +460,10 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 		return wManager;
+ 	}
+ 
++	/**
++	 * Releases memory-hog Swing windows back into the JVM, which will slowly be released
++	 * back into system memory.
++	 */
+ 	public static void nullifyWindows() {
+ 		wSelect = null;
+ 		pSelect = null;
+@@ -469,16 +474,17 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 	@Override
+ 	public void shutDownProgram()
+ 	{
+-	    try {
+-		properties.saveConfig();
+-		logger.info("Configuration saved succesfully");
+-	} catch (IOException e) {
+-		e.printStackTrace();
+-		logger.severe("Configuration could not be saved");
+-	}
+-	tray.remove(trayIcon);
+-	if(FolderManager.isWindows())
+-		JIntellitype.getInstance().cleanUp();
++		try {
++			properties.saveConfig();
++			logger.info("Configuration saved succesfully");
++		} catch (IOException e) {
++			e.printStackTrace();
++			logger.severe("Configuration could not be saved");
++		}
++		tray.remove(trayIcon);
++		if(FolderManager.isWindows())
++			JIntellitype.getInstance().cleanUp();
++		this.netHandler.disable();
+ 	}
+ 
+ 	public static PropertiesHandler getPropertiesHandler() {
+-- 
+2.39.5 (Apple Git-154)
+

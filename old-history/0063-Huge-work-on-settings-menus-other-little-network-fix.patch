@@ -1,0 +1,1020 @@
+From 99ce7bcecad63b8c9d5891e0ac4fad539f255e4d Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Mon, 28 Jul 2014 23:48:39 -0600
+Subject: [PATCH 063/101] Huge work on settings menus, other little network
+ fixes
+
+---
+ .../aptitekk/TeamScreen/Frames/MainFrame.java |  37 +-
+ .../TeamScreen/Frames/PushSelect.java         |   2 +-
+ .../Frames/Settings/ConfigureNeighbor.java    | 317 ++++++++++++++++++
+ .../TeamScreen/Frames/SettingsFrame.java      |  99 +++++-
+ .../TeamScreenBroadcastThread.java            |   5 +-
+ .../aptitekk/TeamScreen/Net/RadarThread.java  | 103 ++++++
+ .../TeamScreen/Net/jrc/ClientApplication.java |   2 +-
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java |  23 +-
+ .../TeamScreen/Window/Util/ImageButton.java   |  39 +++
+ .../TeamScreen/Window/Util/JArrowButton.java  |   2 +-
+ .../Window/Util/JNeighborDisplayPanel.java    | 172 +++++++---
+ 11 files changed, 711 insertions(+), 90 deletions(-)
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Frames/Settings/ConfigureNeighbor.java
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Net/RadarThread.java
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/ImageButton.java
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java
+index 97ce4c8..0e53abf 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java
+@@ -29,6 +29,7 @@ import javax.swing.border.EmptyBorder;
+ 
+ import com.aptitekk.TeamScreen.FolderManager;
+ import com.aptitekk.TeamScreen.TeamScreenDaemon;
++import com.aptitekk.TeamScreen.Window.Util.ImageButton;
+ 
+ /**
+  * Main GUI, it'll kinda be like synergy's with simpler, nicer look
+@@ -53,40 +54,6 @@ public class MainFrame extends JFrame implements ActionListener, MouseListener{
+ 	boolean pinned = false;
+ 	boolean inMeeting = false;
+ 	
+-	class ImageButton{
+-		JLabel image;
+-		boolean enabled;
+-		
+-		public ImageButton(ImageIcon image) {
+-			this.image = new JLabel(image);
+-			this.enabled = true;
+-		}
+-		public ImageButton(ImageIcon image, boolean enabled) {
+-			this.image = new JLabel(image);
+-			this.enabled = enabled;
+-		}
+-		public ImageButton(ImageIcon image, boolean enabled, String toolTip) {
+-			this.image = new JLabel(image);
+-			this.enabled = enabled;
+-			this.image.setToolTipText(toolTip);
+-		}
+-		public ImageButton(ImageIcon image, String toolTip) {
+-			this.image = new JLabel(image);
+-			this.enabled = true;
+-			this.image.setToolTipText(toolTip);
+-		}
+-		
+-		public boolean getEnabled() {
+-			return enabled;
+-		}
+-		public void setEnabled(boolean enable) {
+-			enabled = enable;
+-		}
+-		public JLabel getIconPane() {
+-			return image;
+-		}
+-	}
+-	
+ 	public MainFrame(TeamScreenDaemon master) {
+ 		this.master = master;
+ 		
+@@ -260,7 +227,7 @@ public class MainFrame extends JFrame implements ActionListener, MouseListener{
+ 			SwingUtilities.invokeLater(new Runnable() {
+                 @Override
+ 				public void run() {
+-                	//TODO open settings
++                	master.openSettingsWindow();
+                 }
+             });
+ 		} else if(e.getSource().equals(sharePane.getIconPane())) {
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java
+index 386fd31..d6e075e 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java
+@@ -20,7 +20,7 @@ import com.aptitekk.TeamScreen.Util.WindowInfo;
+ import com.aptitekk.TeamScreen.Window.Util.JArrowButton;
+ 
+ /**
+- * TODO Put here a description of what this class does.
++ * Prompts where to push a window
+  *
+  * @author kevint.
+  *         Created Apr 6, 2014.
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/Settings/ConfigureNeighbor.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/Settings/ConfigureNeighbor.java
+new file mode 100644
+index 0000000..2b82a9d
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/Settings/ConfigureNeighbor.java
+@@ -0,0 +1,317 @@
++package com.aptitekk.TeamScreen.Frames.Settings;
++
++import java.awt.BorderLayout;
++import java.awt.Component;
++import java.awt.Dimension;
++import java.awt.Image;
++import java.awt.event.ActionEvent;
++import java.awt.event.ActionListener;
++import java.awt.event.ItemEvent;
++import java.awt.event.ItemListener;
++import java.awt.event.WindowEvent;
++import java.awt.event.WindowListener;
++import java.util.ArrayList;
++import java.util.HashMap;
++
++import javax.swing.BoxLayout;
++import javax.swing.DefaultComboBoxModel;
++import javax.swing.DefaultListCellRenderer;
++import javax.swing.Icon;
++import javax.swing.ImageIcon;
++import javax.swing.JButton;
++import javax.swing.JComboBox;
++import javax.swing.JFrame;
++import javax.swing.JLabel;
++import javax.swing.JList;
++import javax.swing.JPanel;
++import javax.swing.JTabbedPane;
++import javax.swing.JTextField;
++import javax.swing.ListModel;
++import javax.swing.event.ListSelectionEvent;
++import javax.swing.event.ListSelectionListener;
++
++import com.aptitekk.TeamScreen.FolderManager;
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++import com.aptitekk.TeamScreen.Net.NetHandler;
++import com.aptitekk.TeamScreen.Net.RadarThread;
++import com.aptitekk.TeamScreen.Window.Util.JArrowButton;
++import com.aptitekk.TeamScreen.Window.Util.JNeighborDisplayPanel;
++
++public class ConfigureNeighbor extends JFrame implements ListSelectionListener, ActionListener{
++	
++	TeamScreenDaemon master;
++	JNeighborDisplayPanel neighborDisplay;
++	
++	HashMap<String, String> newMap = new HashMap<String, String>();
++	
++	JList<?> neighborPick;
++	JTabbedPane neighborPane;
++	JButton savebtn;
++	
++	JLabel hostInfo;
++	JLabel ipInfo;
++	JLabel slotInfo;
++	JButton configInfo;
++	
++	JList<?> newNeighborPick;
++	public DefaultComboBoxModel<String> aliveNeighborsModel;
++	public ArrayList<String> rawAliveNeighborInfo;
++	JButton selectNewNeighbor;
++	RadarThread radarThread;
++	
++	JTextField manualHost;
++	JTextField manualIP;
++	JComboBox<String> manualSlot;
++	JButton selectManual;
++	
++	public ConfigureNeighbor(TeamScreenDaemon instance, JNeighborDisplayPanel ndisplay) {
++		master = instance;
++		neighborDisplay = ndisplay;
++		
++		newMap = ndisplay.getCurrentData();
++		
++		this.setTitle("Configure Neighbor");
++		System.setProperty("com.apple.mrj.application.apple.menu.about.name", "TeamScreen Settings");
++		
++		this.setSize(600, 500);
++		this.setMaximumSize(new Dimension(600, 500));
++		this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
++		this.setResizable(false);
++		this.setIconImage(FolderManager.createImage("/images/TeamScreen-64px.png", "tray icon"));
++		
++		radarThread = new RadarThread(this);
++		radarThread.start();
++		
++		this.addWindowListener(new WindowListener() {
++			@Override
++			public void windowClosing(WindowEvent e) {
++				radarThread.interrupt();
++			}
++
++			@Override
++			public void windowOpened(WindowEvent e) {;}
++			@Override
++			public void windowClosed(WindowEvent e) {;}
++			@Override
++			public void windowIconified(WindowEvent e) {;}
++			@Override
++			public void windowDeiconified(WindowEvent e) {;}
++			@Override
++			public void windowActivated(WindowEvent e) {;}
++			@Override
++			public void windowDeactivated(WindowEvent e) {;}
++			
++		});
++		
++		initGui();
++	}
++	
++	public void refreshAliveHosts() {
++		if(rawAliveNeighborInfo.size() != aliveNeighborsModel.getSize()) {
++			rawAliveNeighborInfo.clear();
++			aliveNeighborsModel.removeAllElements();
++		}
++	}
++	
++	private void initGui() {
++		this.getContentPane().setLayout(new BorderLayout());
++		
++		neighborPick = new JList<Image>(initNeighborComboBox());
++		neighborPick.addListSelectionListener(this);
++		neighborPick.setCellRenderer(new ImageListRenderer());
++		this.getContentPane().add(neighborPick, BorderLayout.LINE_START);
++		
++		JPanel infoPanel = new JPanel();
++		infoPanel.setLayout(new BoxLayout(infoPanel, BoxLayout.PAGE_AXIS));
++		
++		JPanel hostPanel = new JPanel();
++		JLabel hostLabel = new JLabel("Hostname: ");
++		hostInfo = new JLabel();
++		hostPanel.add(hostLabel);
++		hostPanel.add(hostInfo);
++		
++		JPanel ipPanel = new JPanel();
++		JLabel ipLabel = new JLabel("IP: ");
++		ipInfo   = new JLabel();
++		ipPanel.add(ipLabel);
++		ipPanel.add(ipInfo);
++		
++		JPanel slotPanel = new JPanel();
++		JLabel slotLabel = new JLabel("Slot: ");
++		slotInfo = new JLabel();
++		slotPanel.add(slotLabel);
++		slotPanel.add(slotInfo);
++		
++		configInfo = new JButton("Configure");
++		configInfo.addActionListener(this);
++		infoPanel.add(hostPanel);
++		infoPanel.add(ipPanel);
++		infoPanel.add(slotPanel);
++		infoPanel.add(configInfo);
++		
++		
++		JPanel selectPanel = new JPanel();
++		selectPanel.setLayout(new BorderLayout());
++		newNeighborPick = new JList<String>(aliveNeighborsModel);
++		selectNewNeighbor = new JButton("Select");
++		selectNewNeighbor.addActionListener(this);
++		selectPanel.add(newNeighborPick, BorderLayout.CENTER);
++		selectPanel.add(selectNewNeighbor, BorderLayout.PAGE_END);
++		
++		JPanel manualPanel = new JPanel();
++		manualPanel.setLayout(new BoxLayout(manualPanel, BoxLayout.PAGE_AXIS));
++		
++		JPanel _hostPanel = new JPanel();
++		JLabel _hostLabel = new JLabel("Hostname: ");
++		manualHost = new JTextField(15);
++		_hostPanel.add(_hostLabel);
++		_hostPanel.add(manualHost);
++		
++		JPanel _ipPanel = new JPanel();
++		JLabel _ipLabel = new JLabel("IP: ");
++		manualIP   = new JTextField(16);
++		_ipPanel.add(_ipLabel);
++		_ipPanel.add(manualIP);
++		
++		JPanel _slotPanel = new JPanel();
++		JLabel _slotLabel = new JLabel("Slot: ");
++		manualSlot = new JComboBox<String>(new String[]{"A","B","C","D","E","F"});
++		manualSlot.setEditable(false);
++		_slotPanel.add(_slotLabel);
++		_slotPanel.add(manualSlot);
++		
++		selectManual = new JButton("Select");
++		selectManual.addActionListener(this);
++		manualPanel.add(_hostPanel);
++		manualPanel.add(_ipPanel);
++		manualPanel.add(_slotPanel);
++		manualPanel.add(selectManual);
++		
++		neighborPane = new JTabbedPane();
++		neighborPane.add("Info", infoPanel);
++		neighborPane.add("Select", selectPanel);
++		neighborPane.add("Manual", manualPanel);
++		this.getContentPane().add(neighborPane, BorderLayout.CENTER);
++		
++		this.savebtn = new JButton("Save");
++		this.savebtn.setAlignmentX(RIGHT_ALIGNMENT);
++		this.savebtn.addActionListener(this);
++		this.getContentPane().add(this.savebtn, BorderLayout.PAGE_END);
++	}
++	
++	private ListModel<Image> initNeighborComboBox() {
++		DefaultComboBoxModel<Image> model = new DefaultComboBoxModel<Image>();
++		
++		ImageIcon rightPicture = JArrowButton.getImagefromDirection(JArrowButton.EAST);
++		ImageIcon leftPicture = JArrowButton.getImagefromDirection(JArrowButton.WEST);
++		ImageIcon topPicture = JArrowButton.getImagefromDirection(JArrowButton.NORTH);
++		ImageIcon bottomPicture = JArrowButton.getImagefromDirection(JArrowButton.SOUTH);
++		ImageIcon projectorPicture = JArrowButton.getImagefromDirection(JArrowButton.SPECIAL);
++		ImageIcon centerPicture = new ImageIcon(FolderManager.createImage("/images/computer.png", "computer"));
++		
++		ImageIcon[] imageIcons = new ImageIcon[]{rightPicture, leftPicture, topPicture, bottomPicture, projectorPicture, centerPicture};
++		for(int i = 0; i < imageIcons.length; i++) {
++			Image img = imageIcons[i].getImage();
++			img = img.getScaledInstance(64, 64, Image.SCALE_SMOOTH);
++			model.addElement(img);
++		}
++		
++		return model;
++	}
++
++	@Override
++	public void valueChanged(ListSelectionEvent e) {
++		if(e.getSource().equals(neighborPick)) {
++			String[] data = null;
++			if(neighborPick.getSelectedIndex() == 0) { // right
++				data = newMap.get("Right").split(":");
++			} else if(neighborPick.getSelectedIndex() == 1) { //left
++				data = newMap.get("Left").split(":");
++			} else if(neighborPick.getSelectedIndex() == 2) {
++				data = newMap.get("Top").split(":");
++			} else if(neighborPick.getSelectedIndex() == 3) {
++				data = newMap.get("Bottom").split(":");
++			} else if(neighborPick.getSelectedIndex() == 4) {
++				data = newMap.get("Projector").split(":");
++			} else { //center
++				data = newMap.get("Center").split(":");
++			} try {
++				this.hostInfo.setText(data[0]);
++				this.manualHost.setText(data[0]);
++				this.manualIP.setText(data[1]);
++				this.ipInfo.setText(data[1]);
++				this.slotInfo.setText(data[2]);
++				this.manualSlot.setSelectedItem(data[2]);
++			} catch (ArrayIndexOutOfBoundsException ex) {
++				this.hostInfo.setText("");
++				this.manualHost.setText("");
++				this.manualIP.setText("");
++				this.ipInfo.setText("");
++				this.slotInfo.setText("");
++				this.manualSlot.setSelectedItem("");
++			}
++		}
++	}
++
++	@Override
++	public void actionPerformed(ActionEvent e) {
++		if(e.getSource().equals(this.configInfo)) {
++			this.neighborPane.setSelectedIndex(1);
++		} else if(e.getSource().equals(this.selectNewNeighbor)) {
++			String rawdata = this.rawAliveNeighborInfo.get(newNeighborPick.getSelectedIndex());
++			rawdata = rawdata.replace(NetHandler.PACKET_SEPARATOR_CONSTANT, ":");
++			String data = rawdata +":"+ newMap.get("Center").split(":")[2];
++			System.out.println("Data: " + data);
++			newMap.put(indexToString(neighborPick.getSelectedIndex()), data);
++			this.neighborPane.setSelectedIndex(0);
++			this.neighborPick.setSelectedIndex(neighborPick.getSelectedIndex());
++			this.repaint();
++		} else if(e.getSource().equals(this.selectManual)) {
++			String data = manualHost.getText() + ":" + manualIP.getText() + ":" + manualSlot.getSelectedItem();
++			newMap.put(indexToString(neighborPick.getSelectedIndex()), data);
++			this.neighborPane.setSelectedIndex(0);
++			this.neighborPick.setSelectedIndex(neighborPick.getSelectedIndex());
++			this.repaint();
++		} else if(e.getSource().equals(this.savebtn)) {
++			this.neighborDisplay.refresh(newMap);
++			radarThread.interrupt();
++			this.dispose();
++		}
++	}
++	
++	private String indexToString(int index) {
++		if(neighborPick.getModel().getSize() == 6) {
++			if(index == 0) {
++				return "Right";
++			} else if(index == 1) {
++				return "Left";
++			} else if(index == 2) {
++				return "Top";
++			} else if(index == 3) {
++				return "Bottom";
++			} else if(index == 4) {
++				return "Projector";
++			} else if(index == 5) {
++				return "Center";
++			} else {
++				return null;
++			}
++		}
++		return null;
++	}
++	
++	public class ImageListRenderer extends DefaultListCellRenderer {
++        @Override
++        public Component getListCellRendererComponent(
++                JList list, Object value, int index,
++                boolean isSelected, boolean cellHasFocus) {
++
++            JLabel label = (JLabel) super.getListCellRendererComponent(
++                    list, value, index, isSelected, cellHasFocus);
++            label.setIcon(new ImageIcon((Image) value));
++            label.setText("");
++            return label;
++        }
++    }
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
+index 999afc5..5204318 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
+@@ -1,11 +1,108 @@
+ package com.aptitekk.TeamScreen.Frames;
+ 
++import java.awt.Component;
++import java.awt.Dimension;
++import java.awt.event.ActionEvent;
++import java.awt.event.ActionListener;
++
++import javax.swing.BoxLayout;
++import javax.swing.JButton;
++import javax.swing.JFrame;
++import javax.swing.JPanel;
++import javax.swing.JSeparator;
++import javax.swing.SwingConstants;
++import javax.swing.SwingUtilities;
++
++import com.aptitekk.TeamScreen.FolderManager;
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++import com.aptitekk.TeamScreen.Frames.Settings.ConfigureNeighbor;
++import com.aptitekk.TeamScreen.Window.Util.JNeighborDisplayPanel;
++
+ /**
+  * TODO Put here a description of what this class does.
+  *
+  * @author kevint.
+  *         Created Apr 6, 2014.
+  */
+-public class SettingsFrame {
++public class SettingsFrame extends JFrame implements ActionListener {
++	
++	TeamScreenDaemon master;
++	
++	JButton configure;
++	JNeighborDisplayPanel neighborPanel;
++	JPanel mainPane = new JPanel();
++	JButton close;
++	JButton exit;
++	JButton save;
++	
++	ConfigureNeighbor subframe;
++	
++	public SettingsFrame(TeamScreenDaemon master) {
++		this.master = master;
++		
++		System.setProperty("com.apple.mrj.application.apple.menu.about.name", "TeamScreen Settings");
++		this.setTitle("TeamScreen Settings");
++		
++		this.setSize(475, 600);
++		this.setMaximumSize(new Dimension(475, 600));
++		this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
++		this.setResizable(false);
++		this.setIconImage(FolderManager.createImage("/images/TeamScreen-64px.png", "tray icon"));
++		
++		initGui();
++	}
++	
++	private void initGui() {
++		this.mainPane.setLayout(new BoxLayout(this.mainPane, BoxLayout.PAGE_AXIS));
++		this.neighborPanel = new JNeighborDisplayPanel();
++		this.mainPane.add(this.neighborPanel);
++		
++		JPanel configPanel = new JPanel();
++		configPanel.setLayout(new BoxLayout(configPanel, BoxLayout.LINE_AXIS));
++		this.configure = new JButton("Configure");
++		this.configure.setAlignmentX(RIGHT_ALIGNMENT);
++		this.configure.addActionListener(this);
++		configPanel.add(new JPanel());
++		configPanel.add(this.configure);
++		this.mainPane.add(configPanel);
++		
++		this.mainPane.add(new JSeparator(SwingConstants.HORIZONTAL));
++		
++		JPanel bottomPanel = new JPanel();
++		bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.LINE_AXIS));
++		this.close = new JButton("Close");
++		this.exit = new JButton("Exit");
++		this.save = new JButton("Save");
++		this.close.addActionListener(this);
++		this.save.addActionListener(this);
++		this.exit.addActionListener(this);
++		bottomPanel.add(this.save);
++		bottomPanel.add(new JPanel());
++		bottomPanel.add(this.close);
++		bottomPanel.add(new JPanel());
++		bottomPanel.add(this.exit);
++		this.mainPane.add(bottomPanel);
++		
++		this.add(this.mainPane);
++		this.pack();
++	}
++
++	@Override
++	public void actionPerformed(ActionEvent e) {
++		if(e.getSource().equals(this.close)) {
++			this.dispose();
++		} else if(e.getSource().equals(this.exit)) {
++			this.master.exit();
++		} else if(e.getSource().equals(this.configure)) {
++			SwingUtilities.invokeLater(new Runnable() {
++                @Override
++				public void run() {
++                	if(subframe == null)
++                		subframe = new ConfigureNeighbor(master, neighborPanel);
++                	subframe.setVisible(true);
++                }
++            });
++		}
++	}
+ 
+ }
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java
+index 79ab752..392eed0 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java
+@@ -55,7 +55,7 @@ public class TeamScreenBroadcastThread extends Thread{
+             
+             String IP = this.socket.getLocalAddress().getHostAddress();
+            
+-            byte[] ad = (name + "§" + IP).getBytes();
++            byte[] ad = (name + NetHandler.PACKET_SEPARATOR_CONSTANT + IP).getBytes();
+             
+             List<String> slots = Arrays.asList(new String[]{"A","B","C","D","E","F"});
+             Integer[] ports = new Integer[]{4455, 4456, 4457, 4458, 4459, 4460};
+@@ -63,8 +63,7 @@ public class TeamScreenBroadcastThread extends Thread{
+             int port = ports[slots.indexOf(TeamScreenDaemon.properties.getConfig().getProperty("Slot"))];
+             
+             DatagramPacket packet = new DatagramPacket(ad, ad.length, InetAddress.getByName("224.0.2.12"), port);
+-            TeamScreenDaemon.logger.info("Broadcasting session over LAN from " + getLanIP());
+-            TeamScreenDaemon.logger.info("Datagram Socket Local IP: " + this.socket.getLocalAddress());
++            TeamScreenDaemon.logger.info("Broadcasting session over LAN from " + this.socket.getLocalAddress());
+            
+             while (!isInterrupted() && this.running) {
+                 try {
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/RadarThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/RadarThread.java
+new file mode 100644
+index 0000000..79063bb
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/RadarThread.java
+@@ -0,0 +1,103 @@
++package com.aptitekk.TeamScreen.Net;
++
++import java.io.IOException;
++import java.net.DatagramPacket;
++import java.net.InetAddress;
++import java.net.MulticastSocket;
++import java.net.SocketException;
++import java.net.SocketTimeoutException;
++import java.util.ArrayList;
++import java.util.Arrays;
++import java.util.List;
++
++import javax.swing.DefaultComboBoxModel;
++import javax.swing.ListModel;
++
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++import com.aptitekk.TeamScreen.Frames.Settings.ConfigureNeighbor;
++
++
++
++/**
++ * 
++ * Looks for other alive TeamScreen machines on the LAN
++ * 
++ * @author kevint
++ *
++ */
++public class RadarThread extends Thread{
++	
++	ConfigureNeighbor master;
++	
++	MulticastSocket socket;
++	InetAddress group;
++	boolean stillRunning = true;
++
++	public RadarThread(ConfigureNeighbor instance) {
++		super("TeamScreenRadarThread");
++		
++		master = instance;
++		master.aliveNeighborsModel = new DefaultComboBoxModel<String>();
++		master.rawAliveNeighborInfo= new ArrayList<String>();
++	}
++	
++	@Override
++	public void run() {
++		try 
++		{
++			List<String> slots = Arrays.asList(new String[]{"A","B","C","D","E","F"});
++            Integer[] ports = new Integer[]{4455, 4456, 4457, 4458, 4459, 4460};
++            
++            int port = ports[slots.indexOf(TeamScreenDaemon.properties.getConfig().getProperty("Slot"))];
++			socket = new MulticastSocket(port);
++			group = InetAddress.getByName("224.0.2.12");
++			socket.joinGroup(group);
++			socket.setSoTimeout(50000);
++			DatagramPacket packet;
++			while (stillRunning && !Thread.interrupted()) 
++			{
++			    byte[] buf = new byte[256];
++			    packet = new DatagramPacket(buf, buf.length);
++			    socket.receive(packet);
++	
++			    String received = new String(packet.getData());			  
++			    
++			    String[] splitData = received.split(NetHandler.PACKET_SEPARATOR_CONSTANT);
++			    
++			    String resolvedData = splitData[0];
++			    
++			    boolean alreadyAdded = false;
++			    
++			    if(master.aliveNeighborsModel.getIndexOf(resolvedData) != -1)
++			    	alreadyAdded = true;
++			    
++			    if(!alreadyAdded) {
++			    	master.aliveNeighborsModel.addElement(resolvedData);
++			    	master.rawAliveNeighborInfo.add(received);
++			    	System.out.println("Found " + received);
++			    	master.refreshAliveHosts();
++			    }
++			    
++			    Thread.sleep(100);
++			}
++			socket.leaveGroup(group);
++			socket.close();
++		} catch (SocketTimeoutException e) {
++			e.printStackTrace();
++			master.aliveNeighborsModel.removeAllElements();
++			master.rawAliveNeighborInfo.clear();
++			master.aliveNeighborsModel.addElement("<None found>");
++			master.refreshAliveHosts();
++			this.interrupt();
++		} catch (SocketException e) {
++			e.printStackTrace();
++			this.interrupt();
++		} catch (IOException e) {
++			e.printStackTrace();
++		} catch (InterruptedException e) {
++			;
++		}
++	
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/ClientApplication.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/ClientApplication.java
+index 96d1624..e43b8e7 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/ClientApplication.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/ClientApplication.java
+@@ -274,7 +274,7 @@ public class ClientApplication extends Thread implements RemoteClientController,
+ 
+ 	@Override
+ 	public void actionPerformed(ActionEvent actionEvent) {
+-		// TODO Auto-generated method stub.
++		;
+ 		
+ 	}
+ 
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index 567405a..f34b84f 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -31,6 +31,7 @@ import javax.swing.UnsupportedLookAndFeelException;
+ 
+ import com.aptitekk.TeamScreen.Frames.MainFrame;
+ import com.aptitekk.TeamScreen.Frames.PushSelect;
++import com.aptitekk.TeamScreen.Frames.SettingsFrame;
+ import com.aptitekk.TeamScreen.Frames.WindowSelect;
+ import com.aptitekk.TeamScreen.JNA.WindowManager;
+ import com.aptitekk.TeamScreen.JNA.WindowsNative;
+@@ -63,7 +64,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 	public NetHandler netHandler;
+ 	
+ 	static MainFrame frame;
+-	static JFrame sframe;
++	static SettingsFrame sframe;
+ 	TeamScreenDaemon instance = null;
+ 	static boolean enabled = true;
+ 	static WindowSelect wSelect;
+@@ -220,6 +221,12 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 		if(frame != null)
+ 			frame.updateStatus();
+ 	}
++	public void exit() {
++		tray.remove(trayIcon);
++		if(FolderManager.isWindows())
++			JIntellitype.getInstance().cleanUp();
++		System.exit(0);
++	}
+ 	public boolean isEnabled() {
+ 		return enabled;
+ 	}
+@@ -317,11 +324,22 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 	protected void openMainWindow() {
+     	SwingUtilities.invokeLater(new Runnable() {
+             public void run() {
+-            	frame = new MainFrame(instance);
++            	if(frame == null)
++	            	frame = new MainFrame(instance);
+ 				frame.setVisible(true);
+             }
+         });
+ 	}
++	public void openSettingsWindow() {
++		SwingUtilities.invokeLater(new Runnable() {
++            public void run() {
++            	if(sframe == null)
++            		sframe = new SettingsFrame(instance);
++				sframe.setVisible(true);
++            }
++        });
++	}
++	
+ 	/**
+ 	 * Obtain the image from inside the jar
+ 	 *
+@@ -411,6 +429,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 		wSelect = null;
+ 		pSelect = null;
+ 		frame = null;
++		sframe = null;
+ 	}
+ 
+ }
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/ImageButton.java b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/ImageButton.java
+new file mode 100644
+index 0000000..06bea97
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/ImageButton.java
+@@ -0,0 +1,39 @@
++package com.aptitekk.TeamScreen.Window.Util;
++
++import javax.swing.ImageIcon;
++import javax.swing.JLabel;
++
++public class ImageButton {
++	JLabel image;
++	boolean enabled;
++
++	public ImageButton(ImageIcon image) {
++		this.image = new JLabel(image);
++		this.enabled = true;
++	}
++	public ImageButton(ImageIcon image, boolean enabled) {
++		this.image = new JLabel(image);
++		this.enabled = enabled;
++	}
++	public ImageButton(ImageIcon image, boolean enabled, String toolTip) {
++		this.image = new JLabel(image);
++		this.enabled = enabled;
++		this.image.setToolTipText(toolTip);
++	}
++	public ImageButton(ImageIcon image, String toolTip) {
++		this.image = new JLabel(image);
++		this.enabled = true;
++		this.image.setToolTipText(toolTip);
++	}
++
++	public boolean getEnabled() {
++		return enabled;
++	}
++	public void setEnabled(boolean enable) {
++		enabled = enable;
++	}
++	public JLabel getIconPane() {
++		return image;
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JArrowButton.java b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JArrowButton.java
+index 7d506cb..a576b1f 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JArrowButton.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JArrowButton.java
+@@ -30,7 +30,7 @@ public class JArrowButton extends JButton{
+ 		
+ 	}
+ 	
+-	static ImageIcon getImagefromDirection(int direction) {
++	public static ImageIcon getImagefromDirection(int direction) {
+ 		if(direction == NORTH) {
+ 			return new ImageIcon(FolderManager.createImage("/images/arrownorth.png", "north arrow"));
+ 		} else if (direction == SOUTH) {
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JNeighborDisplayPanel.java b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JNeighborDisplayPanel.java
+index 40415e2..856c588 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JNeighborDisplayPanel.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JNeighborDisplayPanel.java
+@@ -1,13 +1,28 @@
+ package com.aptitekk.TeamScreen.Window.Util;
+ 
++import java.awt.Color;
++import java.awt.Component;
++import java.awt.GridLayout;
++import java.awt.Image;
++import java.awt.event.ActionEvent;
++import java.awt.event.ActionListener;
+ import java.io.IOException;
+ import java.net.InetAddress;
++import java.util.HashMap;
+ 
++import javax.swing.BorderFactory;
+ import javax.swing.BoxLayout;
+ import javax.swing.ImageIcon;
++import javax.swing.JButton;
++import javax.swing.JFrame;
+ import javax.swing.JLabel;
+ import javax.swing.JPanel;
++import javax.swing.JSeparator;
++import javax.swing.JTable;
++import javax.swing.SwingConstants;
++import javax.swing.SwingUtilities;
+ import javax.swing.table.DefaultTableModel;
++import javax.swing.table.JTableHeader;
+ 
+ import com.aptitekk.TeamScreen.FolderManager;
+ import com.aptitekk.TeamScreen.TeamScreenDaemon;
+@@ -20,68 +35,133 @@ import com.aptitekk.TeamScreen.TeamScreenDaemon;
+  */
+ public class JNeighborDisplayPanel extends JPanel{
+ 	
+-	//private String 
++	HashMap<String, String> mappedData = new HashMap<String, String>();
+ 	
+-	public static DefaultTableModel getTableData() {
++	protected HashMap<String, String> getConfigData() {
+ 		try {
+ 			String rightData = TeamScreenDaemon.properties.getConfig().getProperty("RNeighbor");
+ 			String leftData = TeamScreenDaemon.properties.getConfig().getProperty("LNeighbor");
+ 			String topData = TeamScreenDaemon.properties.getConfig().getProperty("TNeighbor");
+ 			String bottomData = TeamScreenDaemon.properties.getConfig().getProperty("BNeighbor");
+ 			String projectorData = TeamScreenDaemon.properties.getConfig().getProperty("PNeighbor");
+-			String centerData = InetAddress.getLocalHost().getHostName();
++			String centerData = InetAddress.getLocalHost().getHostName() + ":" + InetAddress.getLocalHost().getHostAddress() + ":" +
++					TeamScreenDaemon.properties.getConfig().getProperty("Slot");
+ 			
+-			ImageIcon rightPicture = JArrowButton.getImagefromDirection(JArrowButton.EAST);
+-			ImageIcon leftPicture = JArrowButton.getImagefromDirection(JArrowButton.WEST);
+-			ImageIcon topPicture = JArrowButton.getImagefromDirection(JArrowButton.NORTH);
+-			ImageIcon bottomPicture = JArrowButton.getImagefromDirection(JArrowButton.SOUTH);
+-			ImageIcon projectorPicture = JArrowButton.getImagefromDirection(JArrowButton.SPECIAL);
+-			ImageIcon centerPicture = new ImageIcon(FolderManager.createImage("/images/computer.png", "computer"));
++			HashMap<String, String> returnMap = new HashMap<String, String>();
+ 			
+-			JPanel rightPane = new JPanel();
+-			rightPane.setLayout(new BoxLayout(rightPane, BoxLayout.PAGE_AXIS));
+-			rightPane.add(new JLabel(rightPicture));
+-			rightPane.add(new JLabel(rightData));
++			returnMap.put("Right", rightData);
++			returnMap.put("Left", leftData);
++			returnMap.put("Top", topData);
++			returnMap.put("Bottom", bottomData);
++			returnMap.put("Projector", projectorData);
++			returnMap.put("Center", centerData);
+ 			
+-			JPanel leftPane = new JPanel();
+-			leftPane.setLayout(new BoxLayout(leftPane, BoxLayout.PAGE_AXIS));
+-			leftPane.add(new JLabel(leftPicture));
+-			leftPane.add(new JLabel(leftData));
+-			
+-			JPanel topPane = new JPanel();
+-			topPane.setLayout(new BoxLayout(topPane, BoxLayout.PAGE_AXIS));
+-			topPane.add(new JLabel(topPicture));
+-			topPane.add(new JLabel(topData));
+-			
+-			JPanel bottomPane = new JPanel();
+-			bottomPane.setLayout(new BoxLayout(bottomPane, BoxLayout.PAGE_AXIS));
+-			bottomPane.add(new JLabel(bottomPicture));
+-			bottomPane.add(new JLabel(bottomData));
+-			
+-			JPanel projectorPane = new JPanel();
+-			projectorPane.setLayout(new BoxLayout(projectorPane, BoxLayout.PAGE_AXIS));
+-			projectorPane.add(new JLabel(projectorPicture));
+-			projectorPane.add(new JLabel(projectorData));
+-			
+-			JPanel centerPane = new JPanel();
+-			centerPane.setLayout(new BoxLayout(centerPane, BoxLayout.PAGE_AXIS));
+-			centerPane.add(new JLabel(centerPicture));
+-			centerPane.add(new JLabel(centerData));
+-			
+-			Object[][] data = {
+-					{projectorPane, topPane, ""}, 
+-					{leftPane, centerPane, rightPane},
+-					{"", bottomPane, ""}
+-			};
+-			
+-			return new DefaultTableModel(data, new String[]{"1","2","3"});
++			return returnMap;
+ 		} catch (IOException e) {
+ 			e.printStackTrace();
+-			return new DefaultTableModel(null, new String[]{"1","2","3"});
++			return null;
+ 		}
+ 		
++	}
++	
++	public HashMap<String, String> getData() {
++		return mappedData;
++	}
++	
++	public JNeighborDisplayPanel() {
++		initGui(getConfigData());
++	}
++	
++	public void refresh() {
++		this.removeAll();
++		initGui(getConfigData());
++		JFrame frame = (JFrame) SwingUtilities.getRoot(this);
++		frame.pack();
++		this.repaint();
++	}
++	public void refresh(HashMap<String, String> newData) {
++		this.removeAll();
++		initGui(newData);
++		JFrame frame = (JFrame) SwingUtilities.getRoot(this);
++		frame.pack();
++		this.repaint();
++	}
++	public HashMap<String, String> getCurrentData() {
++		return this.mappedData;
++	}
++	
++	private void initGui(HashMap<String, String> newData) {
++		this.mappedData = newData;
++		
++		String rightData = getConfigData().get("Right");
++		String leftData = getConfigData().get("Left");
++		String topData = getConfigData().get("Top");
++		String bottomData = getConfigData().get("Bottom");
++		String projectorData = getConfigData().get("Projector");
++		String centerData = getConfigData().get("Center");
++		
++		ImageIcon rightPicture = JArrowButton.getImagefromDirection(JArrowButton.EAST);
++		ImageIcon leftPicture = JArrowButton.getImagefromDirection(JArrowButton.WEST);
++		ImageIcon topPicture = JArrowButton.getImagefromDirection(JArrowButton.NORTH);
++		ImageIcon bottomPicture = JArrowButton.getImagefromDirection(JArrowButton.SOUTH);
++		ImageIcon projectorPicture = JArrowButton.getImagefromDirection(JArrowButton.SPECIAL);
++		ImageIcon centerPicture = new ImageIcon(FolderManager.createImage("/images/computer.png", "computer"));
+ 		
++		JPanel rightPane = new JPanel();
++		JPanel leftPane = new JPanel();
++		JPanel topPane = new JPanel();
++		JPanel bottomPane = new JPanel();
++		JPanel projectorPane = new JPanel();
++		JPanel centerPane = new JPanel();
+ 		
++		//scale pictures
++		ImageIcon[] pictures = new ImageIcon[]{rightPicture, leftPicture, topPicture, bottomPicture, projectorPicture, centerPicture};
++		String[] data = new String[]{rightData, leftData, topData, bottomData, projectorData, centerData};
++		JPanel[] panes= new JPanel[]{rightPane, leftPane, topPane, bottomPane, projectorPane, centerPane};
++		for(int i = 0; i < pictures.length && i < data.length && i < panes.length; i++) {
++			Image a = pictures[i].getImage();
++			a = a.getScaledInstance(64, 64, Image.SCALE_SMOOTH);
++			pictures[i] = new ImageIcon(a);
++			
++			panes[i].setLayout(new BoxLayout(panes[i], BoxLayout.PAGE_AXIS));
++			JLabel picLabel = new JLabel(pictures[i]);
++			picLabel.setAlignmentX(CENTER_ALIGNMENT);
++			panes[i].add(picLabel);
++			String name = data[i].split(":")[0];
++			JLabel dataLabel = new JLabel(name);
++			dataLabel.setAlignmentX(CENTER_ALIGNMENT);
++			panes[i].add(dataLabel);
++			
++			panes[i].setBackground(Color.WHITE);
++			panes[i].setBorder(BorderFactory.createLineBorder(Color.black));
++		}
++		
++		this.setLayout(new GridLayout(3,5));
++		
++		this.add(emptyPane());
++		this.add(panes[4]);
++		this.add(panes[2]);
++		this.add(emptyPane());
++		this.add(emptyPane());
++		
++		this.add(emptyPane());
++		this.add(panes[1]);
++		this.add(panes[5]);
++		this.add(panes[0]);
++		this.add(emptyPane());
++		
++		this.add(emptyPane());
++		this.add(emptyPane());
++		this.add(panes[3]);
++		this.add(emptyPane());
++		this.add(emptyPane());
++	}
++	
++	private JPanel emptyPane() {
++		JPanel returnPanel = new JPanel();
++		returnPanel.setBackground(Color.WHITE);
++		returnPanel.setBorder(BorderFactory.createLineBorder(Color.black));
++		return returnPanel;
+ 	}
+ 
+ }
+-- 
+2.39.5 (Apple Git-154)
+

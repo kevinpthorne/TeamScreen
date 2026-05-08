@@ -1,0 +1,126 @@
+From 3ba70994f6bba7ad42dac327efafefb97a4ef493 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 30 Jul 2014 09:57:19 -0600
+Subject: [PATCH 076/101] Added ability to move the change log and download
+ dialog on autoupdater
+
+---
+ .../AutoUpdater/ChangeLogDialog.java          | 29 +++++++++++++++++++
+ .../AutoUpdater/DownloadDialog.java           | 29 +++++++++++++++++++
+ 2 files changed, 58 insertions(+)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/ChangeLogDialog.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/ChangeLogDialog.java
+index 03e83f0..8534827 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/ChangeLogDialog.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/ChangeLogDialog.java
+@@ -4,8 +4,10 @@ import java.awt.Color;
+ import java.awt.Dimension;
+ import java.awt.GridLayout;
+ import java.awt.Image;
++import java.awt.Point;
+ import java.awt.event.MouseEvent;
+ import java.awt.event.MouseListener;
++import java.awt.event.MouseMotionListener;
+ import java.awt.event.WindowAdapter;
+ import java.awt.event.WindowEvent;
+ import java.awt.image.BufferedImage;
+@@ -36,6 +38,8 @@ public class ChangeLogDialog extends JFrame implements MouseListener
+     private JLabel yesButtonLabel;
+     private JLabel noButtonLabel;
+     
++	protected Point mouseDownCompCoords;
++    
+     public ChangeLogDialog(String changeLog, int amountToUpdate)
+     {
+ 	this.setResizable(false);
+@@ -44,6 +48,31 @@ public class ChangeLogDialog extends JFrame implements MouseListener
+ 	this.setIconImage(AutoUpdater.windowIcon);
+ 	this.setUndecorated(true);
+ 	
++	this.addMouseListener(new MouseListener(){
++        public void mouseReleased(MouseEvent e) {
++            mouseDownCompCoords = null;
++        }
++        public void mousePressed(MouseEvent e) {
++            mouseDownCompCoords = e.getPoint();
++        }
++        public void mouseExited(MouseEvent e) {
++        }
++        public void mouseEntered(MouseEvent e) {
++        }
++        public void mouseClicked(MouseEvent e) {
++        }
++    });
++
++    this.addMouseMotionListener(new MouseMotionListener(){
++        public void mouseMoved(MouseEvent e) {
++        }
++
++        public void mouseDragged(MouseEvent e) {
++            Point currCoords = e.getLocationOnScreen();
++            setLocation(currCoords.x - mouseDownCompCoords.x, currCoords.y - mouseDownCompCoords.y);
++        }
++    });
++	
+ 	JPanel mainPanel = new JPanel();
+ 	this.setContentPane(mainPanel);
+ 	
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DownloadDialog.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DownloadDialog.java
+index 6b81f6b..67da009 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DownloadDialog.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DownloadDialog.java
+@@ -3,8 +3,10 @@ package com.aptitekk.TeamScreen.AutoUpdater;
+ import java.awt.Color;
+ import java.awt.Dimension;
+ import java.awt.Image;
++import java.awt.Point;
+ import java.awt.event.MouseEvent;
+ import java.awt.event.MouseListener;
++import java.awt.event.MouseMotionListener;
+ import java.awt.event.WindowAdapter;
+ import java.awt.event.WindowEvent;
+ import java.awt.image.BufferedImage;
+@@ -40,6 +42,8 @@ public class DownloadDialog extends JFrame implements DLProgressListener, MouseL
+     private boolean canceled = false;
+     private JLabel progressLabel;
+     
++	protected Point mouseDownCompCoords;
++    
+     public DownloadDialog(int amountToDownload)
+     {
+ 	this.amountToDownload = amountToDownload;
+@@ -51,6 +55,31 @@ public class DownloadDialog extends JFrame implements DLProgressListener, MouseL
+ 	this.setIconImage(AutoUpdater.windowIcon);
+ 	this.setUndecorated(true);
+ 	
++	this.addMouseListener(new MouseListener(){
++        public void mouseReleased(MouseEvent e) {
++            mouseDownCompCoords = null;
++        }
++        public void mousePressed(MouseEvent e) {
++            mouseDownCompCoords = e.getPoint();
++        }
++        public void mouseExited(MouseEvent e) {
++        }
++        public void mouseEntered(MouseEvent e) {
++        }
++        public void mouseClicked(MouseEvent e) {
++        }
++    });
++
++    this.addMouseMotionListener(new MouseMotionListener(){
++        public void mouseMoved(MouseEvent e) {
++        }
++
++        public void mouseDragged(MouseEvent e) {
++            Point currCoords = e.getLocationOnScreen();
++            setLocation(currCoords.x - mouseDownCompCoords.x, currCoords.y - mouseDownCompCoords.y);
++        }
++    });
++	
+ 	JPanel mainPanel = new JPanel();
+ 	this.setContentPane(mainPanel);
+ 	
+-- 
+2.39.5 (Apple Git-154)
+

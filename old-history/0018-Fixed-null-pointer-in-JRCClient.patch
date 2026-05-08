@@ -1,0 +1,27 @@
+From 43e73d529967f246f3f4dd66108c13d33d509f14 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 6 Apr 2014 21:52:09 -0600
+Subject: [PATCH 018/101] Fixed null pointer in JRCClient
+
+---
+ TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
+index 20bbf6d..07cc107 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
+@@ -57,6 +57,10 @@ public class JRCClient extends Thread implements RemoteClientController,MouseLis
+ 		this.port = port;
+ 		
+ 		clientVar = this;
++		
++		timeoutTimer = new TimeWatch(30000);
++		timeoutTimer.addActionListener(this);
++		timeoutTimer.setActionCommand("timedOut");
+ 	}
+ 	
+ 	@Override
+-- 
+2.39.5 (Apple Git-154)
+

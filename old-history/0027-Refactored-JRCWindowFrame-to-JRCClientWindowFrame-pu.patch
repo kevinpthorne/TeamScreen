@@ -1,0 +1,116 @@
+From df13e4f9173b132c12e02ca958e6e69649289226 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Mon, 7 Apr 2014 16:53:29 -0600
+Subject: [PATCH 027/101] Refactored JRCWindowFrame to JRCClientWindowFrame,
+ pushed-window title is now transferred and displayed on client
+
+---
+ .../src/com/aptitekk/TeamScreen/Net/PacketProcessor.java  | 5 +++--
+ .../src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java    | 8 +++++---
+ .../{JRCWindowFrame.java => JRCClientWindowFrame.java}    | 6 ++++--
+ .../aptitekk/TeamScreen/Net/jrc/WindowControlAdapter.java | 2 +-
+ 4 files changed, 13 insertions(+), 8 deletions(-)
+ rename TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/{JRCWindowFrame.java => JRCClientWindowFrame.java} (86%)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+index d2c1e06..fb7ad17 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+@@ -40,7 +40,8 @@ public class PacketProcessor {
+ 					try {
+ 						return "connectToMe"+NetHandler.PACKET_SEPARATOR_CONSTANT+TeamScreenBroadcastThread.getLanIP()+
+ 								NetHandler.PACKET_SEPARATOR_CONSTANT+
+-								this.master.parent.properties.getConfig().getProperty("Slot");
++								this.master.parent.properties.getConfig().getProperty("Slot")+
++								TeamScreenDaemon.windowPushed.getTitle();
+ 					} catch (Exception exception) {
+ 						exception.printStackTrace();
+ 						return null;
+@@ -52,7 +53,7 @@ public class PacketProcessor {
+ 				List<String> slots = Arrays.asList(new String[]{"A","B","C","D","E","F"});
+ 		        Integer[] ports = new Integer[]{4455, 4456, 4457, 4458, 4459, 4460};
+ 		        int port = ports[slots.indexOf(packetSplit[2])];
+-				this.master.startNewJRCClient(packetSplit[1], port);
++				this.master.startNewJRCClient(packetSplit[1], port, packetSplit[3]);
+ 				return null;
+ 			} else {
+ 				return null;
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
+index 11911b4..74717fb 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
+@@ -36,7 +36,8 @@ public class JRCClient extends Thread implements RemoteClientController,MouseLis
+ 	
+ 	private boolean clientRunning = false;
+ 	
+-	private JRCWindowFrame client;
++	private JRCClientWindowFrame client;
++	private String windowTitle;
+ 	
+ 	private Connection mainConnection;
+ 	private Connection controlConnection;
+@@ -52,9 +53,10 @@ public class JRCClient extends Thread implements RemoteClientController,MouseLis
+ 	
+ 	static JRCClient clientVar;
+ 	
+-	public JRCClient(String address, int port) {
++	public JRCClient(String address, int port, String windowTitle) {
+ 		this.address = address;
+ 		this.port = port;
++		this.windowTitle = windowTitle;
+ 		
+ 		clientVar = this;
+ 		
+@@ -113,7 +115,7 @@ public class JRCClient extends Thread implements RemoteClientController,MouseLis
+ 				this.mainConnection = new SocketConnection( new Socket(this.address,this.port),this.address+":"+this.port );
+ 			//}
+ 		
+-			this.client = new JRCWindowFrame(this);
++			this.client = new JRCClientWindowFrame(this, hubAlias + " - " + this.windowTitle);
+ 			showClient();
+ 			
+ 			TeamScreenDaemon.logger.info("Logged in. Sending alias "+hubAlias+" to server.");
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCWindowFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
+similarity index 86%
+rename from TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCWindowFrame.java
+rename to TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
+index 8198c52..321f042 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCWindowFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
+@@ -17,16 +17,18 @@ import org.one.stone.soup.remote.control.client.RemoteControlClient;
+  * @author kevint.
+  *         Created Apr 6, 2014.
+  */
+-public class JRCWindowFrame extends JFrame implements RemoteControlClient {
++public class JRCClientWindowFrame extends JFrame implements RemoteControlClient {
+ 	
+ 	private JRCClient controller;
+ 	private ImageIcon viewIcon;
+ 	private JLabel picLabel;
+ 	private boolean firstFrame = true;
+ 	
+-	public JRCWindowFrame(JRCClient controller) {
++	public JRCClientWindowFrame(JRCClient controller, String title) {
+ 		this.controller = controller;
+ 		
++		this.setTitle(title);
++		
+ 		this.viewIcon = new ImageIcon( ImageFactory.loadImage("jar://images/teamscreen.png") );
+ 		
+ 		this.picLabel = new JLabel(this.viewIcon);
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowControlAdapter.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowControlAdapter.java
+index fa5143c..7363d7a 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowControlAdapter.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowControlAdapter.java
+@@ -49,7 +49,7 @@ public class WindowControlAdapter implements ControlAdapter {
+ 
+ 	@Override
+ 	public void mouseMove(int x, int y) {
+-		this.robot.mouseMove(getWindowRect().x+x,getWindowRect().y+y);
++		this.robot.mouseMove(getWindowRect().x+x,getWindowRect().y+y-60);
+ 	}
+ 
+ 	@Override
+-- 
+2.39.5 (Apple Git-154)
+

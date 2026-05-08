@@ -1,0 +1,21 @@
+From cb485b4719cacdbc686b9cacbb489ffce2472e76 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Thu, 3 Apr 2014 14:13:45 -0600
+Subject: [PATCH 001/101] Initial once again
+
+---
+ TeamScreen                                      |  1 -
+ TeamScreen/.classpath                           |  6 ++++++
+ TeamScreen/.gitignore                           |  1 +
+ TeamScreen/.project                             | 17 +++++++++++++++++
+ TeamScreen/.settings/org.eclipse.jdt.core.prefs | 11 +++++++++++
+ 5 files changed, 35 insertions(+), 1 deletion(-)
+ delete mode 160000 TeamScreen
+ create mode 100644 TeamScreen/.classpath
+ create mode 100644 TeamScreen/.gitignore
+ create mode 100644 TeamScreen/.project
+ create mode 100644 TeamScreen/.settings/org.eclipse.jdt.core.prefs
+
+-- 
+2.39.5 (Apple Git-154)
+

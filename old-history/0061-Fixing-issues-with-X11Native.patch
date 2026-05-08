@@ -1,0 +1,25 @@
+From 592393f6d997e40e23f0e8dec590723b7ef3686a Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Fri, 25 Jul 2014 11:27:57 -0600
+Subject: [PATCH 061/101] Fixing issues with X11Native
+
+---
+ TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
+index b211f58..672a044 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
+@@ -171,7 +171,7 @@ public class X11Native extends WindowManager {
+ 	
+ 	static interface X11Ext extends Library
+ 	{
+-		final X11 instance = (X11) Native.loadLibrary ("x11", X11Ext.class);
++		final X11 instance = X11.INSTANCE;
+ 		Display x11Display = instance.XOpenDisplay(null);
+ 	}
+ 
+-- 
+2.39.5 (Apple Git-154)
+

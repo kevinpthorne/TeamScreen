@@ -1,0 +1,1067 @@
+From fdf5d160b65c6b23a47b61b312dfa9229d8e5d9b Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Thu, 3 Apr 2014 22:50:14 -0600
+Subject: [PATCH 004/101] Added properties, logging, packet handling, and
+ started GUI
+
+---
+ .../aptitekk/TeamScreen/FolderManager.java    | 163 +++++++++++++++++
+ .../TeamScreenBroadcastThread.java            | 106 +++++++++++
+ .../Net/Listeners/ListenerHandler.java        |  56 ++++++
+ .../Net/Listeners/PacketListener.java         |  93 ++++++++++
+ .../aptitekk/TeamScreen/Net/NetHandler.java   |  85 +++++++++
+ .../TeamScreen/Net/PacketProcessor.java       |  27 +++
+ .../TeamScreen/PropertiesHandler.java         | 113 ++++++++++++
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java | 171 +++++++++++++++++-
+ .../aptitekk/TeamScreen/Util/LogFormat.java   |  63 +++++++
+ .../TeamScreen/Util/SwingHandler.java         |  42 +++++
+ .../aptitekk/TeamScreen/Window/MainFrame.java |  31 ++++
+ 11 files changed, 948 insertions(+), 2 deletions(-)
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/FolderManager.java
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/ListenerHandler.java
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Util/LogFormat.java
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Util/SwingHandler.java
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Window/MainFrame.java
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/FolderManager.java b/TeamScreen/src/com/aptitekk/TeamScreen/FolderManager.java
+new file mode 100644
+index 0000000..561e587
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/FolderManager.java
+@@ -0,0 +1,163 @@
++package com.aptitekk.TeamScreen;
++
++import java.awt.Image;
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.OutputStream;
++import java.lang.reflect.Field;
++import java.net.URISyntaxException;
++import java.net.URL;
++import java.util.Comparator;
++
++import javax.swing.ImageIcon;
++
++
++/**
++ * Manages folder and directory modifications
++ *
++ * @author kevint.
++ *         Created Apr 7, 2013.
++ */
++public class FolderManager {
++	
++	/**
++	 * Static FolderManager variable
++	 */
++	public static FolderManager foldermanager;
++	
++	private static String OS = System.getProperty("os.name").toLowerCase();
++	
++	/**
++	 * Deletes a directory
++	 *
++	 * @param directory
++	 * @return bool
++	 */
++	public static boolean deleteDirectory(File directory) {
++	    if(directory.exists()){
++	        File[] files = directory.listFiles();
++	        if(null!=files){
++	            for(int i=0; i<files.length; i++) {
++	                if(files[i].isDirectory()) {
++	                    deleteDirectory(files[i]);
++	                }
++	                else {
++	                    files[i].delete();
++	                }
++	            }
++	        }
++	    }
++	    return(directory.delete());
++	}
++	
++	/**
++	 * Copies a directory
++	 *
++	 * @param src
++	 * @param dest
++	 * @throws IOException
++	 */
++	public static void copyFolder(File src, File dest) throws IOException{
++		 
++    	if(src.isDirectory()){
++ 
++    		//if directory not exists, create it
++    		if(!dest.exists()){
++    		   dest.mkdir();
++    		   //System.out.println("Directory copied from "+ src + "  to " + dest);
++    		}
++ 
++    		//list all the directory contents
++    		String files[] = src.list();
++ 
++    		for (String file : files) {
++    		   //construct the src and dest file structure
++    		   File srcFile = new File(src, file);
++    		   File destFile = new File(dest, file);
++    		   //recursive copy
++    		   copyFolder(srcFile,destFile);
++    		}
++ 
++    	}else{
++    		//if file, then copy it
++    		//Use bytes stream to support all file types
++    		InputStream in = new FileInputStream(src);
++    	        OutputStream out = new FileOutputStream(dest); 
++ 
++    	        byte[] buffer = new byte[1024];
++ 
++    	        int length;
++    	        //copy the file content in bytes 
++    	        while ((length = in.read(buffer)) > 0){
++    	    	   out.write(buffer, 0, length);
++    	        }
++ 
++    	        in.close();
++    	        out.close();
++    	        //System.out.println("File copied from " + src + " to " + dest);
++    	}
++	}
++	public static boolean isWindows() {
++		 
++		return (OS.indexOf("win") >= 0);
++ 
++	}
++ 
++	public static boolean isMac() {
++ 
++		return (OS.indexOf("mac") >= 0);
++ 
++	}
++ 
++	public static boolean isUnix() {
++ 
++		return (OS.indexOf("nix") >= 0 || OS.indexOf("nux") >= 0 || OS.indexOf("aix") > 0 );
++ 
++	}
++ 
++	public static boolean isSolaris() {
++ 
++		return (OS.indexOf("sunos") >= 0);
++ 
++	}
++	
++	/**
++	 * Use this for finding where our JAR sits <br>
++	 * DO NOT ATTEMPT ANY OTHER WAY. This is for continuity purposes
++	 *
++	 * @return
++	 */
++	public static String getAbsDir()
++	{
++		try {
++			File abs = new File(TeamScreenDaemon.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath()).getParentFile().getAbsoluteFile();
++			return abs.getAbsolutePath();
++		} catch (URISyntaxException e) {
++			return null;
++		} catch (Exception e) {
++			e.printStackTrace();
++			return null;
++		}
++	}
++	
++	/**
++	 * Obtain the image from inside the jar
++	 *
++	 * @param path
++	 * @param description
++	 * @return
++	 */
++    protected static Image createImage(String path, String description) {
++        URL imageURL = TeamScreenDaemon.class.getResource(path);
++         
++        if (imageURL == null) {
++            System.err.println("Resource not found: " + path);
++            return null;
++        } else {
++            return (new ImageIcon(imageURL, description)).getImage();
++        }
++    }
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java
+new file mode 100644
+index 0000000..6180445
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java
+@@ -0,0 +1,106 @@
++package com.aptitekk.TeamScreen.Net.Broadcaster;
++
++import java.net.DatagramPacket;
++import java.net.DatagramSocket;
++import java.net.Inet4Address;
++import java.net.InetAddress;
++import java.net.NetworkInterface;
++import java.util.Arrays;
++import java.util.Enumeration;
++import java.util.List;
++
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++import com.aptitekk.TeamScreen.Net.NetHandler;
++
++
++/**
++ * Broadcasts to clients saying that theres a classroom here!
++ *
++ * @author kevint.
++ *         Created Feb 24, 2014.
++ */
++public class TeamScreenBroadcastThread extends Thread{
++	private NetHandler parent;
++    private DatagramSocket socket;
++    public boolean running = true;
++
++    public TeamScreenBroadcastThread(NetHandler master) {
++        super("TeamScreenBroadcastThread");
++        this.parent = master;
++        try {
++        	InetAddress address = InetAddress.getByName(getLanIP());
++            this.socket = new DatagramSocket(4445, address);
++            this.socket.setSoTimeout(3000);
++        } catch (Exception e) {
++            e.printStackTrace();
++            TeamScreenDaemon.logger.severe("Host does not support datagram sockets. Shutting down...");
++            this.running = false;
++        }
++    }
++
++
++
++	@Override
++    public void interrupt() {
++        super.interrupt();
++        this.running = false;
++        this.socket.close();
++    }
++
++    @Override
++    public void run() {
++        try {
++            String name = TeamScreenDaemon.properties.getConfig().getProperty("Name");
++            
++            String IP = this.socket.getLocalAddress().getHostAddress();
++           
++            byte[] ad = (name + "§" + IP).getBytes();
++            
++            List<String> slots = Arrays.asList(new String[]{"A","B","C","D","E","F"});
++            Integer[] ports = new Integer[]{4455, 4456, 4457, 4458, 4459, 4460};
++            
++            int port = ports[slots.indexOf(TeamScreenDaemon.properties.getConfig().getProperty("Slot"))];
++            
++            DatagramPacket packet = new DatagramPacket(ad, ad.length, InetAddress.getByName("224.0.2.12"), port);
++            TeamScreenDaemon.logger.info("Broadcasting session over LAN from " + getLanIP());
++            TeamScreenDaemon.logger.info("Datagram Socket Local IP: " + this.socket.getLocalAddress());
++           
++            while (!isInterrupted() && this.running) {
++                try {
++                    this.socket.send(packet);
++                } catch (Exception e) {
++                    e.printStackTrace();
++                    break;
++                }
++                try {
++                    sleep(1000);
++                } catch (InterruptedException e) { /*Emptiness */}
++            }
++        } catch (Exception e) {
++            e.printStackTrace();
++        }
++    }
++
++    private String getLanIP() throws Exception {
++
++        try {
++            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
++
++            while (interfaces.hasMoreElements()) {
++                NetworkInterface iface = interfaces.nextElement();
++                Enumeration<InetAddress> addresses = iface.getInetAddresses();
++
++                while (addresses.hasMoreElements()) {
++                    InetAddress address = addresses.nextElement();
++                    if (address instanceof Inet4Address && !address.isLoopbackAddress()) return address.getHostAddress();
++                }
++            }
++            throw new Exception("No usable IPv4 non-loopback address found");
++        } catch (Exception e) {
++            e.printStackTrace();
++            TeamScreenDaemon.logger.severe("Could not automatically detect LAN IP, please set server-ip in server.properties.");
++            TeamScreenDaemon.logger.severe("Using " + InetAddress.getLocalHost().getHostAddress());
++            return InetAddress.getLocalHost().getHostAddress();
++        }
++    }
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/ListenerHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/ListenerHandler.java
+new file mode 100644
+index 0000000..d21ce5b
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/ListenerHandler.java
+@@ -0,0 +1,56 @@
++package com.aptitekk.TeamScreen.Net.Listeners;
++
++import java.io.IOException;
++import java.net.ServerSocket;
++import java.net.Socket;
++import java.util.ArrayList;
++
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++import com.aptitekk.TeamScreen.Net.NetHandler;
++
++/**
++ * Handles the listener threads
++ *
++ * @author kevint.
++ *         Created Feb 17, 2014.
++ */
++public class ListenerHandler extends Thread{
++	
++	public ArrayList<PacketListener> listenerList;
++	public ServerSocket serverSocket;
++	private NetHandler netHandler;
++	private int port;
++
++	public ListenerHandler(NetHandler netHandler, int port)
++	{
++		this.listenerList = new ArrayList<PacketListener>();
++		this.netHandler = netHandler;
++		this.port = port;
++	}
++
++	@Override
++	public void run() {
++		try {
++			this.serverSocket = new ServerSocket(port);
++			this.serverSocket.setSoTimeout(0);
++		} catch (IOException e) {
++			e.printStackTrace();
++		}
++		
++		while(true)
++		{
++			try {
++				Socket connectionSocket = serverSocket.accept();
++				TeamScreenDaemon.logger.info("Socket Accepted!");
++				
++				PacketListener listener = new PacketListener(netHandler, connectionSocket);
++				this.listenerList.add(listener);
++				listener.stopping = false;
++				listener.start();
++			} catch (IOException e) {
++				break;
++			}			
++		}
++	}
++	
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
+new file mode 100644
+index 0000000..09bef37
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
+@@ -0,0 +1,93 @@
++package com.aptitekk.TeamScreen.Net.Listeners;
++
++import java.io.BufferedReader;
++import java.io.DataOutputStream;
++import java.io.IOException;
++import java.io.InputStreamReader;
++import java.net.Socket;
++import java.net.SocketException;
++import java.net.SocketTimeoutException;
++
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++import com.aptitekk.TeamScreen.Net.NetHandler;
++
++
++/**
++ * Listens to packets sent to the server from client
++ *
++ * @author kevint.
++ *         Created Feb 14, 2014.
++ */
++public class PacketListener extends Thread{
++	
++	public boolean stopping = false;
++	private Socket connectionSocket;
++	private NetHandler master;
++	
++	/**
++	 * 
++	 *
++	 * @param netHandler
++	 * @param connectionSocket
++	 */
++	public PacketListener(NetHandler netHandler, Socket connectionSocket) {
++		super("PacketListener");
++		this.connectionSocket = connectionSocket;
++		this.master = netHandler;
++	}
++	
++	/**
++	 * Opens for packets on specified port
++	 *
++	 */
++	@Override
++	public void run() {
++		while(!this.stopping)
++		{
++			try
++			{
++				BufferedReader inFromClient = new BufferedReader(new InputStreamReader(connectionSocket.getInputStream()));
++				DataOutputStream outToClient = new DataOutputStream(connectionSocket.getOutputStream());
++
++				connectionSocket.setSoTimeout(0);
++				TeamScreenDaemon.logger.info("Reading from client...");
++				String clientPacket = inFromClient.readLine();
++				if(clientPacket == null)
++				{
++					TeamScreenDaemon.logger.info("Null :(");
++					this.stopping = true;
++					this.interrupt();
++					break;
++				}
++				String toSend = "";
++				
++				TeamScreenDaemon.logger.info(clientPacket);
++				
++				this.master.getProcessor().onPacketReceived(clientPacket);
++				
++			    if(!toSend.equals(""))
++			    	outToClient.writeBytes(toSend);
++			    TeamScreenDaemon.logger.info("Sent: "+toSend);
++			} catch (SocketTimeoutException e) {
++				e.printStackTrace();
++				this.stopping = true;
++				this.interrupt();
++			} catch (SocketException e) {
++				this.stopping = true;
++				this.interrupt();
++			} catch (IOException e) {
++				e.printStackTrace();
++				this.stopping = true;
++				this.interrupt();
++			}
++		}
++	}
++	
++	private boolean isIDValid(String ID, String token)
++	{
++		//do some database checks to see if id is valid with token
++		//could also take this opportunity to log which computer is sending a packet.
++		return true;
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
+new file mode 100644
+index 0000000..955792e
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
+@@ -0,0 +1,85 @@
++package com.aptitekk.TeamScreen.Net;
++
++import java.io.IOException;
++import java.net.ServerSocket;
++import java.util.ArrayList;
++
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++import com.aptitekk.TeamScreen.Net.Listeners.ListenerHandler;
++import com.aptitekk.TeamScreen.Net.Listeners.PacketListener;
++
++
++/**
++ * Manages the network framework of the ClassManager
++ *
++ * @author kevint.
++ *         Created Feb 13, 2014.
++ */
++public class NetHandler {
++	
++	public static String PACKET_SEPARATOR_CONSTANT = "§";
++	public static String PACKET_FILLER_CONSTANT = "¬";
++	
++	TeamScreenDaemon parent;
++	ArrayList<PacketProcessor> processors = new ArrayList<PacketProcessor>();
++	ArrayList<Thread> broadcastThreads = new ArrayList<Thread>();
++	private ServerSocket serverSocket;
++	private ListenerHandler listenerHandler;
++	protected PacketProcessor packetProcessor;
++	
++	public NetHandler(TeamScreenDaemon parent) {
++		this.parent = parent;
++		
++		//Start Listeners
++		startnewListener(25001);
++		
++		this.packetProcessor = new PacketProcessor(this);
++	}
++	
++	public void startnewListener(int port) 
++	{
++		TeamScreenDaemon.logger.info("Started listening on port " + port);
++		this.listenerHandler = new ListenerHandler(this, port);
++		listenerHandler.start();
++	}
++	
++	public PacketProcessor getProcessor() {
++		return this.packetProcessor;
++	}
++	
++	public void stopListeners()
++	{
++		for(PacketListener l:listenerHandler.listenerList)
++		{
++			l.stopping = true;
++			l.interrupt();
++		}
++		try {
++			listenerHandler.serverSocket.close();
++		} catch (IOException e) {
++		}
++	}
++	
++	public void startBroadcaster(Thread t) {
++		t.start();
++		this.broadcastThreads.add(t);
++	}
++	public void stopBroadcaster(Thread t) {
++		try {
++			t.interrupt();
++			this.broadcastThreads.remove(t);
++		} catch (Exception e) {
++			TeamScreenDaemon.logger.warning("Broadcaster was either unable to be stopped, or doesn't exist. Caused by: " + e.getCause());
++		}
++	}
++	public void stopAllBroadcasters() {
++		for(Thread t: this.broadcastThreads) {
++			t.interrupt();
++			this.broadcastThreads.remove(t);
++		}
++	}
++	
++	public ArrayList<PacketListener> getListeners() {
++		return this.listenerHandler.listenerList;
++	}
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+new file mode 100644
+index 0000000..98bfba6
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+@@ -0,0 +1,27 @@
++package com.aptitekk.TeamScreen.Net;
++
++/**
++ * Yay for self-explanatory names :D
++ *
++ * @author kevint.
++ *         Created Mar 15, 2014.
++ */
++public class PacketProcessor {
++	
++	NetHandler master;
++	
++	public PacketProcessor(NetHandler nethandler) {
++		this.master = nethandler;
++	}
++
++	/**
++	 * on Packet received event
++	 *
++	 * @return
++	 */
++	public String onPacketReceived(String packetReceived) {
++		
++		return null;
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java
+new file mode 100644
+index 0000000..ec86ad3
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java
+@@ -0,0 +1,113 @@
++package com.aptitekk.TeamScreen;
++
++import java.io.File;
++import java.io.FileInputStream;
++import java.io.FileNotFoundException;
++import java.io.FileOutputStream;
++import java.io.IOException;
++import java.util.Properties;
++
++/**
++ * Main class to handle properties' files
++ *
++ * @author kevint.
++ *         Created Apr 3, 2014.
++ */
++public class PropertiesHandler {
++	
++	public static String properties_filepath = FolderManager.getAbsDir()+"TeamScreen.properties";
++	
++	private static String prop_comments = "This is the default properties file.\n"+
++									"DO NOT EDIT (unless you know what you're doing.\n"+
++									"Copyright AptiTekk 2014\n"+
++									"-------------GRID------------\n"+
++									"|            (P)            |\n"+
++									"|                           |\n"+
++									"| (TL)       (T)       (TR) |\n"+
++									"|       \\     |     /       |\n"+
++									"| (L)-------(You)-------(R) |\n"+
++									"|        /    |    \\        |\n"+
++									"| (BL)       (B)       (BR) |\n"+
++									"_____________________________\n";
++	
++	private Properties prop;
++	
++	public PropertiesHandler() throws FileNotFoundException, IOException {
++		if(!new File(properties_filepath).exists()) {
++			saveDefaultConfig();
++		}
++		this.prop = new Properties();
++		this.prop.load(new FileInputStream(new File(properties_filepath)));
++	}
++	
++	public static Properties loadProperties(String file) throws FileNotFoundException, IOException {
++		Properties prop = new Properties();
++		prop.load(new FileInputStream(new File(file)));
++		return prop;
++	}
++	
++	public static Properties loadProperties(File file) throws FileNotFoundException, IOException {
++		Properties prop = new Properties();
++		prop.load(new FileInputStream(file));
++		return prop;
++	}
++	
++	public static void saveProperties(Properties prop, File file) throws FileNotFoundException, IOException {
++		prop.store(new FileOutputStream(file), null);
++	}
++	
++	/**
++	 * Loads a fresh config straight from the file
++	 *
++	 * @return
++	 * @throws FileNotFoundException
++	 * @throws IOException
++	 */
++	public static Properties loadConfig() throws FileNotFoundException, IOException {
++		Properties prop = new Properties();
++		prop.load(new FileInputStream(new File(properties_filepath)));
++		return prop;
++	}
++	
++	/**
++	 * Loads the config already in memory
++	 *
++	 * @return
++	 * @throws FileNotFoundException
++	 * @throws IOException
++	 */
++	public Properties getConfig() throws FileNotFoundException, IOException {
++		return prop;
++	}
++	
++	/**
++	 * Default values
++	 *
++	 * @throws FileNotFoundException
++	 * @throws IOException
++	 */
++	public void saveDefaultConfig() throws FileNotFoundException, IOException {
++		prop = new Properties();
++		prop.setProperty("Name", java.net.InetAddress.getLocalHost().getHostName());
++		prop.setProperty("Slot", "A");
++		prop.setProperty("Log", "false");
++		prop.setProperty("LNeighbor", "");
++		prop.setProperty("RNeighbor", "");
++		prop.setProperty("TNeighbor", "");
++		prop.setProperty("BNeighbor", "");
++		prop.setProperty("TLNeighbor", "");
++		prop.setProperty("TRNeighbor", "");
++		prop.setProperty("PNeighbor", "");
++		prop.store(new FileOutputStream(properties_filepath), prop_comments);
++	}
++	
++	/**
++	 * Saves loaded configuration
++	 *
++	 * @throws FileNotFoundException
++	 * @throws IOException
++	 */
++	public void saveConfig() throws FileNotFoundException, IOException {
++		prop.store(new FileOutputStream(properties_filepath), prop_comments);
++	}
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index e8e3288..ac93c73 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -1,5 +1,24 @@
+ package com.aptitekk.TeamScreen;
+ 
++import java.awt.AWTException;
++import java.awt.MenuItem;
++import java.awt.PopupMenu;
++import java.awt.SystemTray;
++import java.awt.TrayIcon;
++import java.awt.event.ActionEvent;
++import java.awt.event.ActionListener;
++import java.util.logging.ConsoleHandler;
++import java.util.logging.FileHandler;
++import java.util.logging.Logger;
++
++import javax.swing.JFrame;
++import javax.swing.JOptionPane;
++import javax.swing.SwingUtilities;
++
++import com.aptitekk.TeamScreen.Net.NetHandler;
++import com.aptitekk.TeamScreen.Util.LogFormat;
++import com.aptitekk.TeamScreen.Window.MainFrame;
++
+ /**
+  * Main tray for TeamScreen, stays dormant until user action
+  *
+@@ -8,6 +27,19 @@ package com.aptitekk.TeamScreen;
+  */
+ public class TeamScreenDaemon {
+ 	
++	public static TrayIcon trayIcon;
++	
++	public static final Logger logger = Logger.getLogger("TeamScreen");
++	
++	public static PropertiesHandler properties;
++	public static String runningversion;
++	public static final SystemTray tray = SystemTray.getSystemTray();
++	private NetHandler netHandler;
++	
++	static JFrame frame;
++	static JFrame sframe;
++	static TeamScreenDaemon TSDaemon;
++	
+ 	/**
+ 	 * Start up here
+ 	 *
+@@ -15,8 +47,143 @@ public class TeamScreenDaemon {
+ 	 */
+ 	public static void main(String[] args) {
+ 		//start meh up
+-		
+-		
++		//set look and feel if wanted
++
++		new TeamScreenDaemon();
+ 	}
++	
++	private TeamScreenDaemon() {
++		TSDaemon = this;
++		logger.info("Starting ClassManager...");
++		try{
++			properties = new PropertiesHandler();
++			
++			logger.setUseParentHandlers(false);
++			LogFormat formatter = new LogFormat();
++			if(Boolean.valueOf(properties.getConfig().getProperty("Log"))) {
++				FileHandler fh;
++				ConsoleHandler consoleHandler = new ConsoleHandler();
++		        consoleHandler.setFormatter(formatter);
++		        logger.addHandler(consoleHandler);
++				try {
++					logger.info("Opened log file at: " + FolderManager.getAbsDir() + "/TeamScreen.log");
++					fh = new FileHandler(FolderManager.getAbsDir() + "/TeamScreen.log");
++					fh.setFormatter(formatter);
++			        logger.addHandler(fh);
++				} catch (Exception exception) {
++					logger.severe("Could not create log file, not storing logs. Caused by: " + exception.getCause());
++				}
++			}
++			
++			
++	        createTray();
++			addTray();
++			
++			this.netHandler = new NetHandler(this);
++			
++			trayIcon.displayMessage("Ready", "Initialization complete.", TrayIcon.MessageType.INFO);
++
++			//openMainWindow();
++			
++			logger.info("Started TeamScreen successfully!");
++		} catch (Exception e) {
++			// crash dialog perhaps?
++		}
++	}
++	
++	private void createTray() {
++		//Check the SystemTray support
++        if (!SystemTray.isSupported()) {
++            System.out.println("SystemTray is not supported");
++            return;
++        }
++        final PopupMenu popup = new PopupMenu();
++        trayIcon = new TrayIcon(FolderManager.createImage("/images/icon.png", "tray icon"));
++         
++        // Create a popup menu components
++        MenuItem openItem = new MenuItem("Open");
++        MenuItem aboutItem = new MenuItem("About");
++        MenuItem exitItem = new MenuItem("Exit");
++         
++        //Add components to popup menu
++        popup.add(openItem);
++        popup.addSeparator();
++        popup.addSeparator();
++        popup.add(aboutItem);
++        popup.add(exitItem);
++         
++        trayIcon.setPopupMenu(popup);
++        trayIcon.setToolTip("TeamScreen");
++        trayIcon.setImageAutoSize(true);
++         
++        trayIcon.addActionListener(new ActionListener() {
++            @Override
++			public void actionPerformed(ActionEvent e) {
++            	openMainWindow();
++            }
++        });
++         
++        aboutItem.addActionListener(new ActionListener() {
++            @Override
++			public void actionPerformed(ActionEvent e) {
++                JOptionPane.showMessageDialog(null,
++                        "TeamScreen\n"+
++                		"Copyright 2014 AptiTekk LLC");
++            }
++        });
++         
++        ActionListener listener = new ActionListener() {
++            @Override
++			public void actionPerformed(ActionEvent e) {
++                MenuItem item = (MenuItem)e.getSource();
++                System.out.println(item.getLabel());
++                if ("Open".equals(item.getLabel())) {
++                	SwingUtilities.invokeLater(new Runnable() {
++                        @Override
++						public void run() {
++                        	openMainWindow();
++                        }
++                    });
++                     
++                }
++            }
++        };
++         
++        openItem.addActionListener(listener);
++        aboutItem.addActionListener(listener);
++         
++        exitItem.addActionListener(new ActionListener() {
++            @Override
++			public void actionPerformed(ActionEvent e) {
++                tray.remove(trayIcon);
++                System.exit(0);
++            }
++        });
++    }
++	
++	protected static void openMainWindow() {
++		if(frame == null)
++	    	SwingUtilities.invokeLater(new Runnable() {
++	            public void run() {
++	            	frame = new MainFrame(TSDaemon);
++					frame.setVisible(true);
++	            }
++	        });
++    	else {
++    		frame.setVisible(true);
++    	}
++	}
++	
++	private void addTray() {
++    	try {
++    		if(trayIcon == null) {
++    			createTray();
++    		}
++            tray.add(trayIcon);
++        } catch (AWTException e) {
++            System.out.println("TrayIcon could not be added.");
++            return;
++        }
++    }
+ 
+ }
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Util/LogFormat.java b/TeamScreen/src/com/aptitekk/TeamScreen/Util/LogFormat.java
+new file mode 100644
+index 0000000..fbafb88
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Util/LogFormat.java
+@@ -0,0 +1,63 @@
++package com.aptitekk.TeamScreen.Util;
++
++import java.io.PrintWriter;
++import java.io.StringWriter;
++import java.text.SimpleDateFormat;
++import java.util.logging.Formatter;
++import java.util.logging.LogRecord;
++
++/**
++ * Formats the logging output
++ *
++ * @author kevint.
++ *         Created Feb 23, 2014.
++ */
++public class LogFormat extends Formatter{
++
++	@Override
++	public synchronized String format(LogRecord log) {
++		StringBuilder finallog = new StringBuilder();
++
++		java.util.Date date= new java.util.Date();
++		
++		finallog.append("[");
++		
++		SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
++        String formatted_date = DATE_FORMAT.format(date);
++		
++		finallog.append(formatted_date)
++			.append("]")
++            .append(" ");
++		
++		String message = formatMessage(log);
++		
++		// Level
++	    finallog.append(log.getLevel().getLocalizedName());
++	    finallog.append(": ");
++
++	    // Indent - the more serious, the more indented.
++	    //sb.append( String.format("% ""s") );
++	    int iOffset = (1000 - log.getLevel().intValue()) / 100;
++	    for( int i = 0; i < iOffset;  i++ ){
++	    	finallog.append(" ");
++	    }
++
++	    finallog.append(message);
++	    finallog.append(System.getProperty("line.separator"));
++
++        if (log.getThrown() != null) {
++            try {
++                StringWriter sw = new StringWriter();
++                PrintWriter pw = new PrintWriter(sw);
++                log.getThrown().printStackTrace(pw);
++                pw.close();
++                finallog.append(sw.toString());
++            } catch (Exception ex) {
++                // ignore
++            }
++        }
++
++        return finallog.toString();
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Util/SwingHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/Util/SwingHandler.java
+new file mode 100644
+index 0000000..4bbdbd5
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Util/SwingHandler.java
+@@ -0,0 +1,42 @@
++package com.aptitekk.TeamScreen.Util;
++
++import java.util.logging.Handler;
++import java.util.logging.LogRecord;
++
++import javax.swing.JTextArea;
++
++/**
++ * Duplicates log entries into a JTextArea given
++ *
++ * @author kevint.
++ *         Created Feb 23, 2014.
++ */
++public class SwingHandler extends Handler{
++	
++	private JTextArea destination;
++	
++	public SwingHandler(JTextArea textarea) {
++		super();
++		this.destination = textarea;
++		this.setFormatter(new LogFormat());
++	}
++
++	@Override
++	public void close() throws SecurityException {
++		//nothing!
++	}
++
++	@Override
++	public void flush() {
++		this.destination.setText(null);
++		
++	}
++
++	@Override
++	public void publish(LogRecord record) {
++		this.destination.append(this.getFormatter().format(record));
++		this.destination.setCaretPosition(this.destination.getText().length());
++		
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/MainFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Window/MainFrame.java
+new file mode 100644
+index 0000000..b386855
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Window/MainFrame.java
+@@ -0,0 +1,31 @@
++package com.aptitekk.TeamScreen.Window;
++
++import javax.swing.JFrame;
++import javax.swing.JOptionPane;
++
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++
++/**
++ * Main GUI, it'll kinda be like synergy's with simpler, nicer look
++ *
++ * @author kevint.
++ *         Created Apr 3, 2014.
++ */
++public class MainFrame extends JFrame{
++	
++	TeamScreenDaemon master;
++	
++	public MainFrame(TeamScreenDaemon master) {
++		this.master = master;
++		
++		initGui();
++	}
++	
++	private void initGui() {
++		JOptionPane.showMessageDialog(this, "To be implemented");
++		this.dispose();
++	}
++	
++	
++
++}
+-- 
+2.39.5 (Apple Git-154)
+

@@ -1,0 +1,48 @@
+From 8d850c74ca514d3c8fd2a78279a55b5baf7362d6 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 28 May 2014 15:39:51 -0600
+Subject: [PATCH 052/101] Added verbose
+
+---
+ .../TeamScreen/Net/jrc/DynamicJRCServerApplication.java     | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+index 260e748..46d686f 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+@@ -67,12 +67,12 @@ public class DynamicJRCServerApplication extends Thread {
+ 							if(controlAdapter != null)
+ 								controlAdapter.updateWindow(window);
+ 						} catch (com.aptitekk.TeamScreen.JNA.WindowManager.WindowNotFoundException e) {
++							System.out.println("Window must've been closed...");
+ 							e.printStackTrace();
+ 							break;
+ 						}
+ 					}
+ 					instance.interrupt();
+-					this.interrupt();
+ 				}
+ 			};
+ 			this.windowUpdater.start();
+@@ -94,7 +94,7 @@ public class DynamicJRCServerApplication extends Thread {
+ 	{
+ 		if(this.serverRunning==true)
+ 		{
+-			TeamScreenDaemon.logger.warning("The server is already running");
++			System.out.println("[Warning] The server is already running");
+ 			return;
+ 		}
+ 		
+@@ -105,7 +105,7 @@ public class DynamicJRCServerApplication extends Thread {
+ 	{
+ 		if(this.serverRunning==false)
+ 		{
+-			TeamScreenDaemon.logger.warning("The server is not running");
++			System.out.println("[Warning] The server is not running");
+ 			return;
+ 		}
+ 		this.serverRunning=false;
+-- 
+2.39.5 (Apple Git-154)
+

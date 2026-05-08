@@ -1,0 +1,59 @@
+From b2accb296c114748320ee47f2f4c3039a81cebe4 Mon Sep 17 00:00:00 2001
+From: Mitch Talmadge <mitcht@aptitekk.com>
+Date: Wed, 30 Jul 2014 19:49:11 -0600
+Subject: [PATCH 087/101] .gitignore is now working
+
+---
+ TeamScreen/TeamScreen.properties | 28 ----------------------------
+ TeamScreen/updates.properties    |  4 ----
+ 2 files changed, 32 deletions(-)
+ delete mode 100644 TeamScreen/TeamScreen.properties
+ delete mode 100644 TeamScreen/updates.properties
+
+diff --git a/TeamScreen/TeamScreen.properties b/TeamScreen/TeamScreen.properties
+deleted file mode 100644
+index 6988587..0000000
+--- a/TeamScreen/TeamScreen.properties
++++ /dev/null
+@@ -1,28 +0,0 @@
+-#This is the default properties file.
+-#DO NOT EDIT (unless you know what you're doing.
+-#Copyright AptiTekk 2014
+-#-------------GRID------------
+-#|            (P)            |
+-#|                           |
+-#| (TL)       (T)       (TR) |
+-#|       \     |     /       |
+-#| (L)-------(You)-------(R) |
+-#|        /    |    \        |
+-#| (BL)       (B)       (BR) |
+-#_____________________________
+-#
+-#Tue Jul 29 17:56:56 MDT 2014
+-BNeighbor=
+-RNeighbor=
+-Slot=A
+-KeyStroke=6
+-KeyStrokeEnd=1
+-PNeighbor=
+-Log=false
+-Name=LatitudeE7
+-NotificationLevel=warning
+-LNeighbor=Dark8\:172.24.1.177\:A
+-TRNeighbor=
+-TNeighbor=
+-TLNeighbor=
+-AutoUpdate=false
+diff --git a/TeamScreen/updates.properties b/TeamScreen/updates.properties
+deleted file mode 100644
+index e49cc16..0000000
+--- a/TeamScreen/updates.properties
++++ /dev/null
+@@ -1,4 +0,0 @@
+-#Auto Updater Properties File -- DO NOT EDIT.
+-#Tue Jul 29 18:12:44 MDT 2014
+-currentVersionID=wv0o5dBJgn4\=
+-currentVersionName=kcOvQHt+2oM\=
+-- 
+2.39.5 (Apple Git-154)
+

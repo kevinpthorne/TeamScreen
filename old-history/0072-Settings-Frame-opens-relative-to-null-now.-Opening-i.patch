@@ -1,0 +1,829 @@
+From 93fa36a1095c7623412294c43d54aa6206620e1b Mon Sep 17 00:00:00 2001
+From: Mitch Talmadge <mitcht@aptitekk.com>
+Date: Wed, 30 Jul 2014 03:17:32 -0600
+Subject: [PATCH 072/101] Settings Frame opens relative to null now. Opening it
+ relative to the mainFrame prevented it from being dragged away when the
+ mainFrame was in the corner and pinned down.
+
+---
+ TeamScreen/TeamScreen.properties              |   4 +-
+ .../aptitekk/TeamScreen/Frames/MainFrame.java | 540 +++++++++---------
+ .../TeamScreen/Frames/SettingsFrame.java      | 224 ++++----
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java |   4 +-
+ 4 files changed, 386 insertions(+), 386 deletions(-)
+
+diff --git a/TeamScreen/TeamScreen.properties b/TeamScreen/TeamScreen.properties
+index 636e7be..cd68aec 100644
+--- a/TeamScreen/TeamScreen.properties
++++ b/TeamScreen/TeamScreen.properties
+@@ -1,5 +1,5 @@
+ #This is the default properties file.
+-#DO NOT EDIT (unless you know what you're doing.
++#DO NOT EDIT (Unless you are instructed to do so.)
+ #Copyright AptiTekk 2014
+ #-------------GRID------------
+ #|            (P)            |
+@@ -11,7 +11,7 @@
+ #| (BL)       (B)       (BR) |
+ #_____________________________
+ #
+-#Tue Jul 29 17:40:27 MDT 2014
++#Wed Jul 30 03:15:19 MDT 2014
+ BNeighbor=
+ RNeighbor=
+ Slot=A
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java
+index 55f78b9..412dfc3 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java
+@@ -1,270 +1,270 @@
+-package com.aptitekk.TeamScreen.Frames;
+-
+-import java.awt.Color;
+-import java.awt.Component;
+-import java.awt.ComponentOrientation;
+-import java.awt.Dimension;
+-import java.awt.FlowLayout;
+-import java.awt.Image;
+-import java.awt.Point;
+-import java.awt.event.ActionEvent;
+-import java.awt.event.ActionListener;
+-import java.awt.event.FocusEvent;
+-import java.awt.event.FocusListener;
+-import java.awt.event.MouseEvent;
+-import java.awt.event.MouseListener;
+-import java.awt.event.MouseMotionListener;
+-import java.awt.event.WindowEvent;
+-import java.awt.event.WindowFocusListener;
+-
+-import javax.swing.BorderFactory;
+-import javax.swing.Box;
+-import javax.swing.ImageIcon;
+-import javax.swing.JFrame;
+-import javax.swing.JLabel;
+-import javax.swing.JOptionPane;
+-import javax.swing.JPanel;
+-import javax.swing.SwingUtilities;
+-import javax.swing.border.EmptyBorder;
+-
+-import com.aptitekk.TeamScreen.FolderManager;
+-import com.aptitekk.TeamScreen.TeamScreenDaemon;
+-import com.aptitekk.TeamScreen.Window.Util.ImageButton;
+-
+-/**
+- * Main GUI, it'll kinda be like synergy's with simpler, nicer look
+- *
+- * @author kevint.
+- *         Created Apr 3, 2014.
+- */
+-public class MainFrame extends JFrame implements ActionListener, MouseListener{
+-	
+-	final int iconSize = 32;
+-	
+-	TeamScreenDaemon master;
+-	static Point mouseDownCompCoords;
+-	
+-	JPanel mainPane;
+-	
+-	ImageButton sharePane;
+-	ImageButton settingsPane;
+-	ImageButton joinPane;
+-	ImageButton leavePane;
+-	ImageButton pinPane;
+-	ImageButton exitPane;
+-	
+-	boolean pinned = false;
+-	boolean inMeeting = false;
+-	
+-	public MainFrame(TeamScreenDaemon master) {
+-		this.master = master;
+-		
+-		System.setProperty("com.apple.mrj.application.apple.menu.about.name", "TeamScreen");
+-		this.setTitle("TeamScreen");
+-		this.setMaximumSize(new Dimension((int) (iconSize*7.5), iconSize+6));
+-		this.setMinimumSize(new Dimension((int) (iconSize*7.5), iconSize+6));
+-		setResizable(false);
+-		setLocationRelativeTo(null);
+-
+-		this.setIconImage(FolderManager.createImage("/images/TeamScreen-64px.png", "tray icon"));
+-		
+-		this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Already there
+-	    
+-	    mouseDownCompCoords = null;
+-        this.setUndecorated(true);
+-        this.setVisible(true);
+-        this.setBounds(0, 0, 480, 70);
+-        this.setAlwaysOnTop(pinned);
+-
+-        this.addMouseListener(new MouseListener(){
+-            public void mouseReleased(MouseEvent e) {
+-                mouseDownCompCoords = null;
+-            }
+-            public void mousePressed(MouseEvent e) {
+-                mouseDownCompCoords = e.getPoint();
+-            }
+-            public void mouseExited(MouseEvent e) {
+-            }
+-            public void mouseEntered(MouseEvent e) {
+-            }
+-            public void mouseClicked(MouseEvent e) {
+-            }
+-        });
+-
+-        this.addMouseMotionListener(new MouseMotionListener(){
+-            public void mouseMoved(MouseEvent e) {
+-            }
+-
+-            public void mouseDragged(MouseEvent e) {
+-                Point currCoords = e.getLocationOnScreen();
+-                setLocation(currCoords.x - mouseDownCompCoords.x, currCoords.y - mouseDownCompCoords.y);
+-            }
+-        });
+-	    
+-		initGui();
+-		
+-		this.getContentPane().setBackground(Color.WHITE);
+-		((JPanel) this.getContentPane()).setBorder(BorderFactory.createCompoundBorder(
+-				BorderFactory.createMatteBorder(5, 5, 5, 5, new Color(0, 120, 255)),
+-				new EmptyBorder(10, 10, 10, 10)));
+-		this.addWindowFocusListener(new WindowFocusListener() {
+-
+-			@Override
+-			public void windowGainedFocus(WindowEvent e) {
+-				((JPanel) getContentPane()).setBorder(BorderFactory.createCompoundBorder(
+-						BorderFactory.createMatteBorder(5, 5, 5, 5, new Color(0, 120, 255)),
+-						new EmptyBorder(10, 10, 10, 10)));
+-			}
+-
+-			@Override
+-			public void windowLostFocus(WindowEvent e) {
+-				if(!pinned)
+-					((JPanel) getContentPane()).setBorder(BorderFactory.createCompoundBorder(
+-							BorderFactory.createMatteBorder(5, 5, 5, 5, new Color(138, 138, 138)),
+-							new EmptyBorder(10, 10, 10, 10)));
+-			}
+-			
+-		});
+-		
+-		this.pack();
+-	}
+-	
+-	private void initGui() {
+-		mainPane = new JPanel(new FlowLayout());
+-		mainPane.setComponentOrientation(ComponentOrientation.LEFT_TO_RIGHT);
+-		
+-		Image logo = FolderManager.createImage("/images/TeamScreen-64px.png", "logo icon");
+-		logo = logo.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH);
+-		JLabel logoPane = new JLabel(new ImageIcon(logo));
+-		mainPane.add(logoPane);
+-		
+-		Image join = FolderManager.createImage("/images/join-enabled.png", "join icon");
+-		join = join.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH);
+-		joinPane = new ImageButton(new ImageIcon(join), "Join");
+-		mainPane.add(joinPane.getIconPane());
+-		Image leave = FolderManager.createImage("/images/leave-disabled.png", "leave icon");
+-		leave = leave.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH);
+-		leavePane = new ImageButton(new ImageIcon(leave), false, "Leave");
+-		mainPane.add(leavePane.getIconPane());
+-		
+-		//space
+-		mainPane.add(Box.createHorizontalStrut(125));
+-		
+-		Image share = FolderManager.createImage("/images/share-enabled.png", "share icon");
+-		share = share.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH);
+-		sharePane = new ImageButton(new ImageIcon(share), "Share");
+-		mainPane.add(sharePane.getIconPane());
+-		
+-		Image setting=FolderManager.createImage("/images/settings.png", "settings icon");
+-		setting = setting.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH);
+-		settingsPane = new ImageButton(new ImageIcon(setting), "Settings");
+-		mainPane.add(settingsPane.getIconPane());
+-		
+-		Image pin;
+-		if(pinned)
+-			pin = FolderManager.createImage("/images/pinned.png", "pinned icon");
+-		else
+-			pin = FolderManager.createImage("/images/pin.png", "pin icon");
+-		pin = pin.getScaledInstance((iconSize/2), (iconSize/2), Image.SCALE_SMOOTH);
+-		pinPane = new ImageButton(new ImageIcon(pin), "Pin");
+-		mainPane.add(pinPane.getIconPane());
+-		
+-		Image exit = FolderManager.createImage("/images/exit.png", "exit icon");
+-		exit = exit.getScaledInstance((iconSize/2), (iconSize/2), Image.SCALE_SMOOTH);
+-		exitPane = new ImageButton(new ImageIcon(exit), "Exit");
+-		mainPane.add(exitPane.getIconPane());
+-		
+-		joinPane.getIconPane().addMouseListener(this);
+-		leavePane.getIconPane().addMouseListener(this);
+-		sharePane.getIconPane().addMouseListener(this);
+-		settingsPane.getIconPane().addMouseListener(this);
+-		pinPane.getIconPane().addMouseListener(this);
+-		exitPane.getIconPane().addMouseListener(this);
+-		
+-		this.add(mainPane);
+-	}
+-	
+-	public void updateStatus() {
+-		if(this.master.isEnabled()) {
+-			//disable buttons
+-			this.repaint();
+-		} else {
+-			this.repaint();
+-		}
+-	}
+-
+-	@Override
+-	public void actionPerformed(ActionEvent e) {
+-		/*if(e.getSource().equals(this.enableToggle)) {
+-			if(this.master.isEnabled()) {
+-				this.master.disable();
+-			} else {
+-				this.master.enable();
+-			}
+-		}*/
+-		
+-	}
+-
+-	@Override
+-	public void mouseClicked(MouseEvent e) {
+-		if(e.getSource().equals(joinPane.getIconPane())) {
+-			if(joinPane.getEnabled())
+-				JOptionPane.showMessageDialog(this, "Meetings haven't been implemented yet!", "Unimplemented Error",
+-						JOptionPane.ERROR_MESSAGE);
+-		} else if (e.getSource().equals(leavePane.getIconPane())) {
+-			if(leavePane.getEnabled())
+-				JOptionPane.showMessageDialog(this, "Meetings haven't been implemented yet!", "Unimplemented Error",
+-						JOptionPane.ERROR_MESSAGE);
+-		} else if(e.getSource().equals(exitPane.getIconPane())) {
+-			this.dispose();
+-			this.dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING));
+-		} else if(e.getSource().equals(pinPane.getIconPane())) {
+-			if(pinned) {
+-				pinned = false;
+-				Image pin = FolderManager.createImage("/images/pin.png", "pin icon");
+-				pin = pin.getScaledInstance((iconSize/2), (iconSize/2), Image.SCALE_SMOOTH);
+-				pinPane.getIconPane().setIcon(new ImageIcon(pin));
+-				this.repaint();
+-			} else {
+-				pinned = true;
+-				Image pin = FolderManager.createImage("/images/pinned.png", "pinned icon");
+-				pin = pin.getScaledInstance((iconSize/2), (iconSize/2), Image.SCALE_SMOOTH);
+-				pinPane.getIconPane().setIcon(new ImageIcon(pin));
+-				this.repaint();
+-			}
+-			this.setAlwaysOnTop(pinned);
+-		} else if(e.getSource().equals(settingsPane.getIconPane())) {
+-			final MainFrame instance = this;
+-			SwingUtilities.invokeLater(new Runnable() {
+-                @Override
+-				public void run() {
+-                	master.openSettingsWindow(instance);
+-                }
+-            });
+-		} else if(e.getSource().equals(sharePane.getIconPane())) {
+-			if(!inMeeting) {
+-				SwingUtilities.invokeLater(new Runnable() {
+-		            @Override
+-		            public void run() {
+-		                master.openWindowSelect();
+-		            }
+-		        });
+-			}
+-		}
+-	}
+-
+-	@Override
+-	public void mousePressed(MouseEvent e) {}
+-
+-	@Override
+-	public void mouseReleased(MouseEvent e) {}
+-
+-	@Override
+-	public void mouseEntered(MouseEvent e) {}
+-
+-	@Override
+-	public void mouseExited(MouseEvent e) {}
+-	
+-	
+-
+-}
++package com.aptitekk.TeamScreen.Frames;
++
++import java.awt.Color;
++import java.awt.Component;
++import java.awt.ComponentOrientation;
++import java.awt.Dimension;
++import java.awt.FlowLayout;
++import java.awt.Image;
++import java.awt.Point;
++import java.awt.event.ActionEvent;
++import java.awt.event.ActionListener;
++import java.awt.event.FocusEvent;
++import java.awt.event.FocusListener;
++import java.awt.event.MouseEvent;
++import java.awt.event.MouseListener;
++import java.awt.event.MouseMotionListener;
++import java.awt.event.WindowEvent;
++import java.awt.event.WindowFocusListener;
++
++import javax.swing.BorderFactory;
++import javax.swing.Box;
++import javax.swing.ImageIcon;
++import javax.swing.JFrame;
++import javax.swing.JLabel;
++import javax.swing.JOptionPane;
++import javax.swing.JPanel;
++import javax.swing.SwingUtilities;
++import javax.swing.border.EmptyBorder;
++
++import com.aptitekk.TeamScreen.FolderManager;
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++import com.aptitekk.TeamScreen.Window.Util.ImageButton;
++
++/**
++ * Main GUI, it'll kinda be like synergy's with simpler, nicer look
++ *
++ * @author kevint.
++ *         Created Apr 3, 2014.
++ */
++public class MainFrame extends JFrame implements ActionListener, MouseListener{
++	
++	final int iconSize = 32;
++	
++	TeamScreenDaemon master;
++	static Point mouseDownCompCoords;
++	
++	JPanel mainPane;
++	
++	ImageButton sharePane;
++	ImageButton settingsPane;
++	ImageButton joinPane;
++	ImageButton leavePane;
++	ImageButton pinPane;
++	ImageButton exitPane;
++	
++	boolean pinned = false;
++	boolean inMeeting = false;
++	
++	public MainFrame(TeamScreenDaemon master) {
++		this.master = master;
++		
++		System.setProperty("com.apple.mrj.application.apple.menu.about.name", "TeamScreen");
++		this.setTitle("TeamScreen");
++		this.setMaximumSize(new Dimension((int) (iconSize*7.5), iconSize+6));
++		this.setMinimumSize(new Dimension((int) (iconSize*7.5), iconSize+6));
++		setResizable(false);
++		setLocationRelativeTo(null);
++
++		this.setIconImage(FolderManager.createImage("/images/TeamScreen-64px.png", "tray icon"));
++		
++		this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Already there
++	    
++	    mouseDownCompCoords = null;
++        this.setUndecorated(true);
++        this.setVisible(true);
++        this.setBounds(0, 0, 480, 70);
++        this.setAlwaysOnTop(pinned);
++
++        this.addMouseListener(new MouseListener(){
++            public void mouseReleased(MouseEvent e) {
++                mouseDownCompCoords = null;
++            }
++            public void mousePressed(MouseEvent e) {
++                mouseDownCompCoords = e.getPoint();
++            }
++            public void mouseExited(MouseEvent e) {
++            }
++            public void mouseEntered(MouseEvent e) {
++            }
++            public void mouseClicked(MouseEvent e) {
++            }
++        });
++
++        this.addMouseMotionListener(new MouseMotionListener(){
++            public void mouseMoved(MouseEvent e) {
++            }
++
++            public void mouseDragged(MouseEvent e) {
++                Point currCoords = e.getLocationOnScreen();
++                setLocation(currCoords.x - mouseDownCompCoords.x, currCoords.y - mouseDownCompCoords.y);
++            }
++        });
++	    
++		initGui();
++		
++		this.getContentPane().setBackground(Color.WHITE);
++		((JPanel) this.getContentPane()).setBorder(BorderFactory.createCompoundBorder(
++				BorderFactory.createMatteBorder(5, 5, 5, 5, new Color(0, 120, 255)),
++				new EmptyBorder(10, 10, 10, 10)));
++		this.addWindowFocusListener(new WindowFocusListener() {
++
++			@Override
++			public void windowGainedFocus(WindowEvent e) {
++				((JPanel) getContentPane()).setBorder(BorderFactory.createCompoundBorder(
++						BorderFactory.createMatteBorder(5, 5, 5, 5, new Color(0, 120, 255)),
++						new EmptyBorder(10, 10, 10, 10)));
++			}
++
++			@Override
++			public void windowLostFocus(WindowEvent e) {
++				if(!pinned)
++					((JPanel) getContentPane()).setBorder(BorderFactory.createCompoundBorder(
++							BorderFactory.createMatteBorder(5, 5, 5, 5, new Color(138, 138, 138)),
++							new EmptyBorder(10, 10, 10, 10)));
++			}
++			
++		});
++		
++		this.pack();
++	}
++	
++	private void initGui() {
++		mainPane = new JPanel(new FlowLayout());
++		mainPane.setComponentOrientation(ComponentOrientation.LEFT_TO_RIGHT);
++		
++		Image logo = FolderManager.createImage("/images/TeamScreen-64px.png", "logo icon");
++		logo = logo.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH);
++		JLabel logoPane = new JLabel(new ImageIcon(logo));
++		mainPane.add(logoPane);
++		
++		Image join = FolderManager.createImage("/images/join-enabled.png", "join icon");
++		join = join.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH);
++		joinPane = new ImageButton(new ImageIcon(join), "Join");
++		mainPane.add(joinPane.getIconPane());
++		Image leave = FolderManager.createImage("/images/leave-disabled.png", "leave icon");
++		leave = leave.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH);
++		leavePane = new ImageButton(new ImageIcon(leave), false, "Leave");
++		mainPane.add(leavePane.getIconPane());
++		
++		//space
++		mainPane.add(Box.createHorizontalStrut(125));
++		
++		Image share = FolderManager.createImage("/images/share-enabled.png", "share icon");
++		share = share.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH);
++		sharePane = new ImageButton(new ImageIcon(share), "Share");
++		mainPane.add(sharePane.getIconPane());
++		
++		Image setting=FolderManager.createImage("/images/settings.png", "settings icon");
++		setting = setting.getScaledInstance(iconSize, iconSize, Image.SCALE_SMOOTH);
++		settingsPane = new ImageButton(new ImageIcon(setting), "Settings");
++		mainPane.add(settingsPane.getIconPane());
++		
++		Image pin;
++		if(pinned)
++			pin = FolderManager.createImage("/images/pinned.png", "pinned icon");
++		else
++			pin = FolderManager.createImage("/images/pin.png", "pin icon");
++		pin = pin.getScaledInstance((iconSize/2), (iconSize/2), Image.SCALE_SMOOTH);
++		pinPane = new ImageButton(new ImageIcon(pin), "Pin");
++		mainPane.add(pinPane.getIconPane());
++		
++		Image exit = FolderManager.createImage("/images/exit.png", "exit icon");
++		exit = exit.getScaledInstance((iconSize/2), (iconSize/2), Image.SCALE_SMOOTH);
++		exitPane = new ImageButton(new ImageIcon(exit), "Exit");
++		mainPane.add(exitPane.getIconPane());
++		
++		joinPane.getIconPane().addMouseListener(this);
++		leavePane.getIconPane().addMouseListener(this);
++		sharePane.getIconPane().addMouseListener(this);
++		settingsPane.getIconPane().addMouseListener(this);
++		pinPane.getIconPane().addMouseListener(this);
++		exitPane.getIconPane().addMouseListener(this);
++		
++		this.add(mainPane);
++	}
++	
++	public void updateStatus() {
++		if(this.master.isEnabled()) {
++			//disable buttons
++			this.repaint();
++		} else {
++			this.repaint();
++		}
++	}
++
++	@Override
++	public void actionPerformed(ActionEvent e) {
++		/*if(e.getSource().equals(this.enableToggle)) {
++			if(this.master.isEnabled()) {
++				this.master.disable();
++			} else {
++				this.master.enable();
++			}
++		}*/
++		
++	}
++
++	@Override
++	public void mouseClicked(MouseEvent e) {
++		if(e.getSource().equals(joinPane.getIconPane())) {
++			if(joinPane.getEnabled())
++				JOptionPane.showMessageDialog(this, "Meetings haven't been implemented yet!", "Unimplemented Error",
++						JOptionPane.ERROR_MESSAGE);
++		} else if (e.getSource().equals(leavePane.getIconPane())) {
++			if(leavePane.getEnabled())
++				JOptionPane.showMessageDialog(this, "Meetings haven't been implemented yet!", "Unimplemented Error",
++						JOptionPane.ERROR_MESSAGE);
++		} else if(e.getSource().equals(exitPane.getIconPane())) {
++			this.dispose();
++			this.dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING));
++		} else if(e.getSource().equals(pinPane.getIconPane())) {
++			if(pinned) {
++				pinned = false;
++				Image pin = FolderManager.createImage("/images/pin.png", "pin icon");
++				pin = pin.getScaledInstance((iconSize/2), (iconSize/2), Image.SCALE_SMOOTH);
++				pinPane.getIconPane().setIcon(new ImageIcon(pin));
++				this.repaint();
++			} else {
++				pinned = true;
++				Image pin = FolderManager.createImage("/images/pinned.png", "pinned icon");
++				pin = pin.getScaledInstance((iconSize/2), (iconSize/2), Image.SCALE_SMOOTH);
++				pinPane.getIconPane().setIcon(new ImageIcon(pin));
++				this.repaint();
++			}
++			this.setAlwaysOnTop(pinned);
++		} else if(e.getSource().equals(settingsPane.getIconPane())) {
++			final MainFrame instance = this;
++			SwingUtilities.invokeLater(new Runnable() {
++                @Override
++				public void run() {
++                	master.openSettingsWindow();
++                }
++            });
++		} else if(e.getSource().equals(sharePane.getIconPane())) {
++			if(!inMeeting) {
++				SwingUtilities.invokeLater(new Runnable() {
++		            @Override
++		            public void run() {
++		                master.openWindowSelect();
++		            }
++		        });
++			}
++		}
++	}
++
++	@Override
++	public void mousePressed(MouseEvent e) {}
++
++	@Override
++	public void mouseReleased(MouseEvent e) {}
++
++	@Override
++	public void mouseEntered(MouseEvent e) {}
++
++	@Override
++	public void mouseExited(MouseEvent e) {}
++	
++	
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
+index 627a752..5d9b34f 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
+@@ -1,112 +1,112 @@
+-package com.aptitekk.TeamScreen.Frames;
+-
+-import java.awt.Component;
+-import java.awt.Dimension;
+-import java.awt.event.ActionEvent;
+-import java.awt.event.ActionListener;
+-
+-import javax.swing.BoxLayout;
+-import javax.swing.JButton;
+-import javax.swing.JFrame;
+-import javax.swing.JPanel;
+-import javax.swing.JSeparator;
+-import javax.swing.SwingConstants;
+-import javax.swing.SwingUtilities;
+-
+-import com.aptitekk.TeamScreen.FolderManager;
+-import com.aptitekk.TeamScreen.TeamScreenDaemon;
+-import com.aptitekk.TeamScreen.Frames.Settings.ConfigureNeighbor;
+-import com.aptitekk.TeamScreen.Window.Util.JNeighborDisplayPanel;
+-
+-/**
+- * Settings JFrame of the TeamScreen application
+- *
+- * @author kevint.
+- *         Created Apr 6, 2014.
+- */
+-public class SettingsFrame extends JFrame implements ActionListener {
+-	
+-	TeamScreenDaemon master;
+-	
+-	JButton configure;
+-	JNeighborDisplayPanel neighborPanel;
+-	JPanel mainPane = new JPanel();
+-	JButton close;
+-	JButton exit;
+-	JButton save;
+-	
+-	ConfigureNeighbor subframe;
+-	
+-	public SettingsFrame(TeamScreenDaemon master, MainFrame mainFrame) {
+-		this.master = master;
+-		
+-		System.setProperty("com.apple.mrj.application.apple.menu.about.name", "TeamScreen Settings");
+-		this.setTitle("TeamScreen Settings");
+-		
+-		this.setSize(475, 600);
+-		this.setMaximumSize(new Dimension(475, 600));
+-		this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+-		this.setResizable(false);
+-		this.setIconImage(FolderManager.createImage("/images/TeamScreen-64px.png", "tray icon"));
+-		this.setLocationRelativeTo(mainFrame);
+-		
+-		initGui();
+-	}
+-	
+-	private void initGui() {
+-		this.mainPane.setLayout(new BoxLayout(this.mainPane, BoxLayout.PAGE_AXIS));
+-		this.neighborPanel = new JNeighborDisplayPanel();
+-		this.mainPane.add(this.neighborPanel);
+-		
+-		JPanel configPanel = new JPanel();
+-		configPanel.setLayout(new BoxLayout(configPanel, BoxLayout.LINE_AXIS));
+-		this.configure = new JButton("Configure");
+-		this.configure.setAlignmentX(RIGHT_ALIGNMENT);
+-		this.configure.addActionListener(this);
+-		configPanel.add(new JPanel());
+-		configPanel.add(this.configure);
+-		this.mainPane.add(configPanel);
+-		
+-		this.mainPane.add(new JSeparator(SwingConstants.HORIZONTAL));
+-		
+-		JPanel bottomPanel = new JPanel();
+-		bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.LINE_AXIS));
+-		this.close = new JButton("Close");
+-		this.exit = new JButton("Exit");
+-		this.save = new JButton("Save");
+-		this.close.addActionListener(this);
+-		this.save.addActionListener(this);
+-		this.exit.addActionListener(this);
+-		bottomPanel.add(this.save);
+-		bottomPanel.add(new JPanel());
+-		bottomPanel.add(this.close);
+-		bottomPanel.add(new JPanel());
+-		bottomPanel.add(this.exit);
+-		this.mainPane.add(bottomPanel);
+-		
+-		this.add(this.mainPane);
+-		this.pack();
+-	}
+-
+-	@Override
+-	public void actionPerformed(ActionEvent e) {
+-		if(e.getSource().equals(this.close)) {
+-			this.dispose();
+-		} else if(e.getSource().equals(this.exit)) {
+-			this.master.exit();
+-		} else if(e.getSource().equals(this.configure)) {
+-			SwingUtilities.invokeLater(new Runnable() {
+-                @Override
+-				public void run() {
+-                	if(subframe == null)
+-                		subframe = new ConfigureNeighbor(master, neighborPanel);
+-                	subframe.setVisible(true);
+-                }
+-            });
+-		} else if(e.getSource().equals(this.save)) {
+-			this.neighborPanel.saveDataToConfig(this.neighborPanel.getCurrentData());
+-			this.dispose();
+-		}
+-	}
+-
+-}
++package com.aptitekk.TeamScreen.Frames;
++
++import java.awt.Component;
++import java.awt.Dimension;
++import java.awt.event.ActionEvent;
++import java.awt.event.ActionListener;
++
++import javax.swing.BoxLayout;
++import javax.swing.JButton;
++import javax.swing.JFrame;
++import javax.swing.JPanel;
++import javax.swing.JSeparator;
++import javax.swing.SwingConstants;
++import javax.swing.SwingUtilities;
++
++import com.aptitekk.TeamScreen.FolderManager;
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++import com.aptitekk.TeamScreen.Frames.Settings.ConfigureNeighbor;
++import com.aptitekk.TeamScreen.Window.Util.JNeighborDisplayPanel;
++
++/**
++ * Settings JFrame of the TeamScreen application
++ *
++ * @author kevint.
++ *         Created Apr 6, 2014.
++ */
++public class SettingsFrame extends JFrame implements ActionListener {
++	
++	TeamScreenDaemon master;
++	
++	JButton configure;
++	JNeighborDisplayPanel neighborPanel;
++	JPanel mainPane = new JPanel();
++	JButton close;
++	JButton exit;
++	JButton save;
++	
++	ConfigureNeighbor subframe;
++	
++	public SettingsFrame(TeamScreenDaemon master) {
++		this.master = master;
++		
++		System.setProperty("com.apple.mrj.application.apple.menu.about.name", "TeamScreen Settings");
++		this.setTitle("TeamScreen Settings");
++		
++		this.setSize(475, 600);
++		this.setMaximumSize(new Dimension(475, 600));
++		this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
++		this.setResizable(false);
++		this.setIconImage(FolderManager.createImage("/images/TeamScreen-64px.png", "tray icon"));
++		this.setLocationRelativeTo(null);
++		
++		initGui();
++	}
++	
++	private void initGui() {
++		this.mainPane.setLayout(new BoxLayout(this.mainPane, BoxLayout.PAGE_AXIS));
++		this.neighborPanel = new JNeighborDisplayPanel();
++		this.mainPane.add(this.neighborPanel);
++		
++		JPanel configPanel = new JPanel();
++		configPanel.setLayout(new BoxLayout(configPanel, BoxLayout.LINE_AXIS));
++		this.configure = new JButton("Configure");
++		this.configure.setAlignmentX(RIGHT_ALIGNMENT);
++		this.configure.addActionListener(this);
++		configPanel.add(new JPanel());
++		configPanel.add(this.configure);
++		this.mainPane.add(configPanel);
++		
++		this.mainPane.add(new JSeparator(SwingConstants.HORIZONTAL));
++		
++		JPanel bottomPanel = new JPanel();
++		bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.LINE_AXIS));
++		this.close = new JButton("Close");
++		this.exit = new JButton("Exit");
++		this.save = new JButton("Save");
++		this.close.addActionListener(this);
++		this.save.addActionListener(this);
++		this.exit.addActionListener(this);
++		bottomPanel.add(this.save);
++		bottomPanel.add(new JPanel());
++		bottomPanel.add(this.close);
++		bottomPanel.add(new JPanel());
++		bottomPanel.add(this.exit);
++		this.mainPane.add(bottomPanel);
++		
++		this.add(this.mainPane);
++		this.pack();
++	}
++
++	@Override
++	public void actionPerformed(ActionEvent e) {
++		if(e.getSource().equals(this.close)) {
++			this.dispose();
++		} else if(e.getSource().equals(this.exit)) {
++			this.master.exit();
++		} else if(e.getSource().equals(this.configure)) {
++			SwingUtilities.invokeLater(new Runnable() {
++                @Override
++				public void run() {
++                	if(subframe == null)
++                		subframe = new ConfigureNeighbor(master, neighborPanel);
++                	subframe.setVisible(true);
++                }
++            });
++		} else if(e.getSource().equals(this.save)) {
++			this.neighborPanel.saveDataToConfig(this.neighborPanel.getCurrentData());
++			this.dispose();
++		}
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index 9f5c14d..4c036a7 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -359,11 +359,11 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 	    }
+ 	});
+     }
+-    public void openSettingsWindow(final MainFrame frame) {
++    public void openSettingsWindow() {
+ 	SwingUtilities.invokeLater(new Runnable() {
+ 	    public void run() {
+ 		if(sframe == null)
+-		    sframe = new SettingsFrame(instance, frame);
++		    sframe = new SettingsFrame(instance);
+ 		sframe.setVisible(true);
+ 	    }
+ 	});
+-- 
+2.39.5 (Apple Git-154)
+

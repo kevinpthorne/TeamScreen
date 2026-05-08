@@ -1,0 +1,62 @@
+From e9748e14454b6022eec71fff37769eb1362a276d Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 6 Apr 2014 21:59:48 -0600
+Subject: [PATCH 019/101] Hopefully fixed resize issue.
+
+---
+ .../Net/jrc/{JRCFrame.java => JRCWindowFrame.java}       | 9 +++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+ rename TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/{JRCFrame.java => JRCWindowFrame.java} (79%)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCWindowFrame.java
+similarity index 79%
+rename from TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCFrame.java
+rename to TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCWindowFrame.java
+index f6891e3..1703138 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCWindowFrame.java
+@@ -1,6 +1,7 @@
+ package com.aptitekk.TeamScreen.Net.jrc;
+ 
+ import java.awt.Component;
++import java.awt.Dimension;
+ import java.awt.Image;
+ 
+ import javax.swing.ImageIcon;
+@@ -16,13 +17,13 @@ import org.one.stone.soup.remote.control.client.RemoteControlClient;
+  * @author kevint.
+  *         Created Apr 6, 2014.
+  */
+-public class JRCFrame extends JFrame implements RemoteControlClient {
++public class JRCWindowFrame extends JFrame implements RemoteControlClient {
+ 	
+ 	private JRCClient controller;
+ 	private ImageIcon viewIcon;
+ 	private boolean firstFrame = true;
+ 	
+-	public JRCFrame(JRCClient controller) {
++	public JRCWindowFrame(JRCClient controller) {
+ 		this.controller = controller;
+ 		
+ 		viewIcon = new ImageIcon( ImageFactory.loadImage("jar://images/teamscreen.png") );
+@@ -33,7 +34,7 @@ public class JRCFrame extends JFrame implements RemoteControlClient {
+ 		this.setSize(picLabel.getSize());
+ 		this.setVisible(true);
+ 		this.pack();
+-		this.setResizable(false);
++		this.setResizable(true);
+ 	}
+ 	
+ 	@Override
+@@ -50,7 +51,7 @@ public class JRCFrame extends JFrame implements RemoteControlClient {
+ 			controller.doLayout();
+ 			firstFrame=false;
+ 		}
+-		
++		this.setSize(new Dimension(viewIcon.getIconWidth(), viewIcon.getIconHeight()));
+ 		this.repaint(0);
+ 	}
+ 	@Override
+-- 
+2.39.5 (Apple Git-154)
+

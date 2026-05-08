@@ -1,0 +1,576 @@
+From 98c678e3435c8b010665648d4cdbc7a2d8153e47 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 23 Jul 2014 00:27:52 -0600
+Subject: [PATCH 057/101] A lot of work on the X11Native window manager, added
+ server-side sidebar
+
+---
+ TeamScreen/.classpath                         |  12 +-
+ .../Frames/JRCServerControlExtension.java     |  24 ++++
+ .../TeamScreen/JNA/WindowManager.java         |   2 +
+ .../TeamScreen/JNA/WindowsNative.java         |   6 +
+ .../aptitekk/TeamScreen/JNA/X11Native.java    | 103 +++++++++++++++---
+ .../Net/jrc/DynamicJRCServerApplication.java  |  17 ++-
+ .../aptitekk/TeamScreen/Util/WindowInfo.java  |   5 +
+ TeamScreen/src/images/close-hover.png         | Bin 0 -> 656 bytes
+ TeamScreen/src/images/close.png               | Bin 0 -> 740 bytes
+ TeamScreen/src/images/freeze-hover.png        | Bin 0 -> 485 bytes
+ TeamScreen/src/images/freeze.png              | Bin 0 -> 543 bytes
+ TeamScreen/src/images/refresh-hover.png       | Bin 0 -> 607 bytes
+ TeamScreen/src/images/refresh.png             | Bin 0 -> 684 bytes
+ TeamScreen/src/images/resume-hover.png        | Bin 0 -> 615 bytes
+ TeamScreen/src/images/resume.png              | Bin 0 -> 667 bytes
+ 15 files changed, 143 insertions(+), 26 deletions(-)
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Frames/JRCServerControlExtension.java
+ create mode 100644 TeamScreen/src/images/close-hover.png
+ create mode 100644 TeamScreen/src/images/close.png
+ create mode 100644 TeamScreen/src/images/freeze-hover.png
+ create mode 100644 TeamScreen/src/images/freeze.png
+ create mode 100644 TeamScreen/src/images/refresh-hover.png
+ create mode 100644 TeamScreen/src/images/refresh.png
+ create mode 100644 TeamScreen/src/images/resume-hover.png
+ create mode 100644 TeamScreen/src/images/resume.png
+
+diff --git a/TeamScreen/.classpath b/TeamScreen/.classpath
+index 1e33db7..65ff3df 100644
+--- a/TeamScreen/.classpath
++++ b/TeamScreen/.classpath
+@@ -5,8 +5,16 @@
+ 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.7"/>
+ 	<classpathentry kind="lib" path="lib/core.jar"/>
+ 	<classpathentry kind="lib" path="lib/java-remote-control-with-source.jar"/>
+-	<classpathentry kind="lib" path="lib/jna-4.1.0.jar"/>
+-	<classpathentry kind="lib" path="lib/jna-platform-4.1.0.jar"/>
++	<classpathentry kind="lib" path="lib/jna-4.1.0.jar">
++		<attributes>
++			<attribute name="javadoc_location" value="http://twall.github.io/jna/4.1.0/"/>
++		</attributes>
++	</classpathentry>
++	<classpathentry kind="lib" path="lib/jna-platform-4.1.0.jar">
++		<attributes>
++			<attribute name="javadoc_location" value="http://twall.github.io/jna/4.1.0/"/>
++		</attributes>
++	</classpathentry>
+ 	<classpathentry kind="lib" path="lib/open-forum.jar"/>
+ 	<classpathentry kind="lib" path="lib/jintellitype-1.3.9.jar"/>
+ 	<classpathentry kind="output" path="bin"/>
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/JRCServerControlExtension.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/JRCServerControlExtension.java
+new file mode 100644
+index 0000000..ca9e9fb
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/JRCServerControlExtension.java
+@@ -0,0 +1,24 @@
++package com.aptitekk.TeamScreen.Frames;
++
++import java.awt.Dimension;
++
++import javax.swing.JFrame;
++
++import com.aptitekk.TeamScreen.Net.jrc.DynamicJRCServerApplication;
++
++public class JRCServerControlExtension extends JFrame{
++	
++	DynamicJRCServerApplication master;
++	
++	public JRCServerControlExtension(DynamicJRCServerApplication instance) {
++		master = instance;
++		
++		this.setMaximumSize(new Dimension(50, 450));
++		this.setMinimumSize(new Dimension(50, 450));
++		setResizable(false);
++		setLocationRelativeTo(null);
++		
++		this.setAlwaysOnTop(true);
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManager.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManager.java
+index 255f7a8..e4c7e76 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManager.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManager.java
+@@ -13,6 +13,8 @@ public abstract class WindowManager {
+ 	public abstract WindowInfo getWindowbyTitle(String windowTitle) throws WindowNotFoundException;
+ 	
+ 	public abstract WindowInfo updateWindow(WindowInfo w) throws WindowNotFoundException;
++	
++	public abstract void bringWindowToFront(WindowInfo w) throws WindowNotFoundException;
+ 
+ 	
+ 	@SuppressWarnings("serial")
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java
+index 973eca4..25dad32 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java
+@@ -135,12 +135,18 @@ public class WindowsNative extends WindowManager {
+ 		void GetWindowTextA(int hWnd, byte[] buffer, int buflen);
+ 		int GetTopWindow(int hWnd);
+ 		int GetWindow(int hWnd, int flag);
++		boolean SetForegroundWindow(int hWnd);
+ 		
+ 		HWND FindWindow(String lpClassName, String lpWindowName);
+ 	    int GetWindowRect(HWND handle, int[] rect);
+ 	    
+ 		final int GW_HWNDNEXT = 2;
+ 	}
++
++	@Override
++	public void bringWindowToFront(WindowInfo w) {
++		User32.instance.SetForegroundWindow(w.hwnd);
++	}
+ 	
+ 	
+ 	
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
+index 5b45dcf..dc18ddf 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
+@@ -11,30 +11,65 @@ import com.aptitekk.TeamScreen.Util.WindowInfo;
+ import com.aptitekk.TeamScreen.Util.WindowInfo.RECT;
+ import com.sun.jna.Library;
+ import com.sun.jna.Native;
++import com.sun.jna.Pointer;
++import com.sun.jna.platform.unix.X11;
++import com.sun.jna.platform.unix.X11.Display;
++import com.sun.jna.platform.unix.X11.Window;
++import com.sun.jna.platform.unix.X11.WindowByReference;
++import com.sun.jna.platform.unix.X11.XTextProperty;
+ import com.sun.jna.platform.unix.X11.XWindowAttributes;
++import com.sun.jna.ptr.IntByReference;
++import com.sun.jna.ptr.PointerByReference;
+ 
+ public class X11Native extends WindowManager {
+ 
+ 	@Override
+ 	public List<WindowInfo> getWindows() {
+ 		final List<WindowInfo> inflList = new ArrayList<WindowInfo>();
+-		final List<Integer> order = new ArrayList<Integer>();
+-		int top = X11.instance.GetTopWindow(0);
++
++		WindowByReference parent;
++		X11.WindowByReference root;
++	    PointerByReference children;
++	    IntByReference nNumChildren;
++	    
++
++	    int status = X11Ext.instance.XQueryTree(X11Ext.x11Display, 
++	    		X11Ext.instance.XRootWindow(X11Ext.x11Display, X11Ext.instance.XDefaultScreen(X11Ext.x11Display)), 
++	    		root, parent, children, nNumChildren);
++	    if (status == 0)
++	    {
++	        // Could not query window tree further, aborting
++	        return inflList;
++	    }
++
++	    if (nNumChildren.getValue() == 0)
++	    {
++	        return inflList;
++	    }
++
++	    for (int i = 0; i < nNumChildren.getValue(); i++)
++	    {
++	    	inflList.add(getWindow(X11Ext.x11Display, children.getPointer().getIntArray(0, nNumChildren.getValue())[i]));
++	    }
++
++	    X11Ext.instance.XFree(children.getPointer());
++		
++		/*int top = X11.INSTANCE.GetTopWindow(0);
+ 		while (top!=0) {
+ 			order.add(top);
+-			top = X11.instance.GetWindow(top, X11.GW_HWNDNEXT);
++			top = X11.INSTANCE.GetWindow(top, X11.GW_HWNDNEXT);
+ 		}
+-		X11.instance.EnumWindows(new WndEnumProc()
++		X11.INSTANCE.EnumWindows(new WndEnumProc()
+ 		{
+ 			@Override
+ 			public boolean callback(int hWnd, int lParam)
+ 			{
+-				if (X11.instance.IsWindowVisible(hWnd)) {
++				if (X11.INSTANCE.IsWindowVisible(hWnd)) {
+ 					RECT r = new RECT();
+-					X11.instance.GetWindowRect(hWnd, r);
++					X11.INSTANCE.GetWindowRect(hWnd, r);
+ 					if (r.left>-32000) {     // minimized
+ 						byte[] buffer = new byte[1024];
+-						X11.instance.GetWindowTextA(hWnd, buffer, buffer.length);
++						X11.INSTANCE.GetWindowTextA(hWnd, buffer, buffer.length);
+ 						String title = Native.toString(buffer);
+ 						inflList.add(new WindowInfo(hWnd, r, title));
+ 					}
+@@ -49,24 +84,48 @@ public class X11Native extends WindowManager {
+ 				return order.indexOf(o1.hwnd)-order.indexOf(o2.hwnd);
+ 			}
+ 				});
+-		return inflList;
++		return inflList;*/
++	}
++	
++	private WindowInfo getWindow(X11.Display display, X11.Window window) {
++		XTextProperty wmName = null;
++	    XWindowAttributes wmInfo = null;
++
++	    int status = X11Ext.instance.XGetWMName(display, 
++	    		window, 
++	    		wmName);
++	    if(status != 0 && wmName.value != null && wmName.nitems != null) {
++	    	status = X11Ext.instance.XGetWindowAttributes(display, window, wmInfo);
++	    	if(status != 0) {
++	    		WindowInfo.RECT rect = new WindowInfo.RECT();
++	    		rect.top = wmInfo.y;
++	    		rect.bottom = wmInfo.y+wmInfo.height;
++	    		rect.left = wmInfo.x;
++	    		rect.right= wmInfo.x+wmInfo.width;
++	    		return new WindowInfo(window,
++	    				rect,
++	    				wmName.value);
++	    	}
++	    	return null;
++	    }
++	    return null;
+ 	}
+ 	
+ 	@Override
+ 	public WindowInfo getTopWindow() {
+ 		final List<WindowInfo> topWindowList = new ArrayList<WindowInfo>();
+-		int top = X11.instance.GetTopWindow(0);
+-		X11.instance.EnumWindows(new WndEnumProc()
++		int top = X11.INSTANCE.GetTopWindow(0);
++		X11.INSTANCE.EnumWindows(new WndEnumProc()
+ 		{
+ 			@Override
+ 			public boolean callback(int hWnd, int lParam)
+ 			{
+-				if (X11.instance.IsWindowVisible(hWnd)) {
++				if (X11.INSTANCE.IsWindowVisible(hWnd)) {
+ 					RECT r = new RECT();
+-					X11.instance.GetWindowRect(hWnd, r);
++					X11.INSTANCE.GetWindowRect(hWnd, r);
+ 					if (r.left>-32000) {     // minimized
+ 						byte[] buffer = new byte[1024];
+-						X11.instance.GetWindowTextA(hWnd, buffer, buffer.length);
++						X11.INSTANCE.GetWindowTextA(hWnd, buffer, buffer.length);
+ 						String title = Native.toString(buffer);
+ 						topWindowList.add(new WindowInfo(hWnd, r, title));
+ 					}
+@@ -90,7 +149,7 @@ public class X11Native extends WindowManager {
+ 	private int[] getRect(int hwnd) throws WindowNotFoundException,
+ 	GetWindowRectException {
+ 		RECT r = new RECT();
+-		int result = X11.instance.GetWindowRect(hwnd, r);
++		int result = X11.INSTANCE.GetWindowRect(hwnd, r);
+ 		if(result == 0) {
+ 			throw new GetWindowRectException("" + hwnd);
+ 		}
+@@ -121,11 +180,12 @@ public class X11Native extends WindowManager {
+ 		throw new WindowNotFoundException("", w.getTitle());
+ 	}
+ 	
+-	static interface X11 extends Library
++	
++	static interface X11Ext extends Library
+ 	{
+-		final X11 instance = (X11) Native.loadLibrary ("x11", X11.class);
+-		X11 INSTANCE = (X11) Native.loadLibrary("x11", X11.class);
+-		boolean EnumWindows (WndEnumProc wndenumproc, int lParam);
++		final X11 instance = (X11) Native.loadLibrary ("x11", X11Ext.class);
++		Display x11Display = instance.XOpenDisplay(null);
++		
+ 		boolean IsWindowVisible(int hWnd);
+ 		int GetWindowRect(int hWnd, RECT r);
+ 		void GetWindowTextA(int hWnd, byte[] buffer, int buflen);
+@@ -135,6 +195,13 @@ public class X11Native extends WindowManager {
+ 		XWindowAttributes FindWindow(String lpClassName, String lpWindowName);
+ 	    int GetWindowRect(XWindowAttributes handle, int[] rect);
+ 	    
++	    
+ 		final int GW_HWNDNEXT = 2;
+ 	}
++
++
++	@Override
++	public void bringWindowToFront(WindowInfo w) throws WindowNotFoundException {
++		//
++	}
+ }
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+index 2190ade..03c41b9 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+@@ -9,6 +9,7 @@ import org.one.stone.soup.remote.control.server.ControlAdapter;
+ import org.one.stone.soup.screen.recorder.ScreenRecorderListener;
+ 
+ import com.aptitekk.TeamScreen.TeamScreenDaemon;
++import com.aptitekk.TeamScreen.Frames.JRCServerControlExtension;
+ import com.aptitekk.TeamScreen.Net.Broadcaster.TeamScreenBroadcastThread;
+ import com.aptitekk.TeamScreen.Net.jrc.Server.DynamicRemoteControlServer;
+ import com.aptitekk.TeamScreen.Net.jrc.Server.DynamicScreenRecorder;
+@@ -39,6 +40,8 @@ public class DynamicJRCServerApplication extends Thread {
+ 	private WindowControlAdapter controlAdapter;
+ 	private WindowScreenRecorder screenRecorder;
+ 	
++	private JRCServerControlExtension sideBar;
++	
+ 	public DynamicJRCServerApplication(WindowInfo w) {
+ 		DynamicJRCServerApplication.window = w;
+ 		instance = this;
+@@ -57,7 +60,7 @@ public class DynamicJRCServerApplication extends Thread {
+ 	public void run() {
+ 		DynamicJRCServerApplication.threadRunning = true;
+ 		try {
+-			System.out.println("Window hooks placed");
++			//System.out.println("Window hooks placed");
+ 			this.windowUpdater = new Thread() {
+ 				public void run() {
+ 					while(threadRunning) {
+@@ -67,8 +70,9 @@ public class DynamicJRCServerApplication extends Thread {
+ 								screenRecorder.updateWindow(window);
+ 							if(controlAdapter != null)
+ 								controlAdapter.updateWindow(window);
++							//TeamScreenDaemon.getWindowManager().bringWindowToFront(window);
+ 						} catch (com.aptitekk.TeamScreen.JNA.WindowManager.WindowNotFoundException e) {
+-							System.out.println("Window hooks removed");
++							//System.out.println("Window hooks removed");
+ 							e.printStackTrace();
+ 							break;
+ 						}
+@@ -95,7 +99,7 @@ public class DynamicJRCServerApplication extends Thread {
+ 	{
+ 		if(this.serverRunning==true)
+ 		{
+-			System.out.println("[Warning] The server is already running");
++			TeamScreenDaemon.logger.warning("[Warning] The server is already running");
+ 			return;
+ 		}
+ 		
+@@ -106,7 +110,7 @@ public class DynamicJRCServerApplication extends Thread {
+ 	{
+ 		if(this.serverRunning==false)
+ 		{
+-			System.out.println("[Warning] The server is not running");
++			TeamScreenDaemon.logger.warning("[Warning] The server is not running");
+ 			return;
+ 		}
+ 		this.serverRunning=false;
+@@ -116,7 +120,7 @@ public class DynamicJRCServerApplication extends Thread {
+ 	}
+ 
+ 	public void setRequester(String requester) {
+-		TeamScreenDaemon.logger.info("Connected to by: " + requester);
++		TeamScreenDaemon.logger.info("Connected: " + requester);
+ 		
+ 	}
+ 
+@@ -131,7 +135,8 @@ public class DynamicJRCServerApplication extends Thread {
+ 
+ 	public DynamicScreenRecorder getScreenRecorder(OutputStream outputStream,
+ 			ScreenRecorderListener listener) {
+-		this.screenRecorder = new WindowScreenRecorder(outputStream, listener, DynamicJRCServerApplication.window);
++		if(this.screenRecorder == null)
++			this.screenRecorder = new WindowScreenRecorder(outputStream, listener, DynamicJRCServerApplication.window);
+ 		return this.screenRecorder;
+ 	}
+ 	
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Util/WindowInfo.java b/TeamScreen/src/com/aptitekk/TeamScreen/Util/WindowInfo.java
+index 72e83e9..a1d17de 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Util/WindowInfo.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Util/WindowInfo.java
+@@ -4,6 +4,7 @@ import java.util.Arrays;
+ import java.util.List;
+ 
+ import com.sun.jna.Structure;
++import com.sun.jna.platform.unix.X11;
+ 
+ 
+ /**
+@@ -27,10 +28,14 @@ public class WindowInfo {
+ 	}
+ 	
+ 	public int hwnd;
++	public X11.Window window;
+ 	RECT rect;
+ 	String title;
+ 	public WindowInfo(int hwnd, RECT rect, String title)
+ 	{ this.hwnd = hwnd; this.rect = rect; this.title = title; }
++	
++	public WindowInfo(X11.Window window, RECT rect, String title)
++	{ this.window = window; this.rect = rect; this.title = title;}
+ 
+ 	public String toString() {
+ 		return String.format("(%d,%d)-(%d,%d) : \"%s\"",
+diff --git a/TeamScreen/src/images/close-hover.png b/TeamScreen/src/images/close-hover.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..08b2f41dd8468aca534266358ca93ba286d4e2d4
+GIT binary patch
+literal 656
+zcmV;B0&o3^P)<h;3K|Lk000e1NJLTq001BW001Be1^@s6b9#F800074Nkl<ZSi{9v
+zyGjF55ZxlANFgaKtVQwx68r=!ORJDd#KJ$x`$eh{Qdo-k9Tq8rMX<7v5Q10*2|?$C
+z*)W;CuS8@o4CrR&oO$2fC<;8yW;0)_)k@WBbx1NMS&*z*7W`}o9q5MQdQZJxFA(sE
+zWJ&T9D9|0j_F&>xtCgc@8U(c3gILQ77{J;$>N7H)7yxG^0|G6RPO;HwoI>z7p5Zsv
+z(RLGHhLWF?!CV1MQQK~}oAKF0hkIqJFy_DxiCmJe39Qm?x3l|}5H_&oCY4T@Gl4p(
+zw0{%8^}$WV2N=MT<uLXHH=K<8&*aL9Z6?5_Q(utXj?@`IZb<LaM@Bo~1O!xqjIyuD
+z>DU=jp7U+P>6(L_BUrke06FQrGR~uP0+^~XN3l^}E*W&NBEMCQw4~8XI6-xl<gq+;
+zI-QKbDoLEp##9eydekW5JLN#a2@5%bdG7Uk+iU_`?ukvXyxU`=fhn~vCql_Zxd%dT
+z81W?%8<lPKwK+lZ7D~=#C=1<j#5dXI0amK3!!1rE$ou_%)`3wJ`in>cVy{P@<8s1B
+zjsp(4Z}xV8YyNI>fb6e)_9h2{OJHj_--!B35Y&VL<UvlDn$SCjYQyc+oFck6O^0n`
+zCdSaWh?sm*bu^r9M70yfMHH}#A40m_;=~7$<^)!96?0mwmk~So60&5J6JPZIMf{uf
+zGGasLbsRh4B3Dj)N^*|gejT%d^M!<_;K)ZVqCHmF?iUg!NcWYD)0f^$sc<5_*K(DK
+qbUsYtlj^6L%0@aLr~3TY=lL&`+e17UOqB}&0000<MNUMnLSTZc?Jx)c
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/close.png b/TeamScreen/src/images/close.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..81d8522c805f7c169b1d04ea1bbea53576da6346
+GIT binary patch
+literal 740
+zcmV<A0vr8_P)<h;3K|Lk000e1NJLTq001BW001Be1^@s6b9#F800083Nkl<ZSi{9v
+zyG|QH6kVGI6C)#v6sb{^4~U|C0u?0{qKcvv`GU2<ASYD{e*r=%QX<56P`I>GL{t<}
+zgb<=yzjmB^@67JZ&d$py(OzjJKla{p=048MMp2-(PUbs}E<0=_>>^6o2-X9vOf397
+z!vF9Yd^R+$*VcO38wmUz0MaN~F2fc}(Fc8>4ZPW(wP80y2sRG~t`M1H42-oBc-&jO
+z2IsLM;2+r8d9%xoV0Z5}P8Pek@H75~|KT$RzcIxOO!-@IxYq*wYId{3&R`n*{P7ul
+z7JalB_Y^x|=L$H>AcfyvoX$2@Eg|}#FK<#w!kP)HQz`9i+U#Wq&u$`N6a!+Z<uLXH
+zZ#cR0e*vzMC^A7<s?oS8-A<{~Y^|Gph<n+d4-A^}74*Px>vU4;7hVoI9i<WFb1oZB
+zuQ`GX!AV^t5FBFtq)jC3QYAq#mBu7YG*T@^WT=D7+4-n7QW_suNwoSBTmiZ2oTUW`
+zJ{>X+VWV`abFPmX5cpIkkds&xBsTl=3b-icb!Q;6NwF23AZ)Jf1><v5YF#9p;9sVd
+z@#SJw;9W%gV9C?Zj%@X{k$@n#q2Rm>fFb=y5kJZJ4=Aaw4v&o_$_oIlcfL-n!bKR8
+zz(b@4L|u<O<|5$(7n8E9>dndoM9uFE2hMW+c(L#EHxURffvw?e(-B&Npe8iUxt)Yv
+ztSU_yGKQ+c=`{zi&&Cn8C}w30eL^I_$F7EpZ91WmFba`RisAbY)12$wZqf-L{(E~c
+zX)Cd+QY_M9J&am?xD6-lCPZY)B-j&NKHlg5Sq~%O=sb>d5-xC!#G?vMn{*w=;sNJ{
+z1a`3P1JA8}HhWnrqwhk3R{NC<t=3DaQp5VL<yt1{c`?bY)>kvFB=x+U>h`~0&;J4;
+W1nAb1iM0Cw0000<MNUMnLSTYml~6JO
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/freeze-hover.png b/TeamScreen/src/images/freeze-hover.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..bb51bceeb913fa272fa5691e2f3b3226feb95773
+GIT binary patch
+literal 485
+zcmV<B0UG{^P)<h;3K|Lk000e1NJLTq001BW001Be1^@s6b9#F800053Nkl<ZSi{X%
+zEo%co5Is>*QBf*N)QM7A-5*jBSrwux%BhO@!hOMsh!E~KR7F)rmHdDZ5mgmJRYX*1
+z-zytBx9pL-<c{gUK-iu4-fU*}cGvT2SRBW9Q4~FeVVJ|;;WOj>opX*cbvO@Nnx+>Z
+zeulst{$0`M#1MOuI7oURTh$P@eMOGi!by@`0X%UK?%*Hr1jK##gYiDc%-qg_n~<|=
+zoqYfn7QqH0uORU&B=0kp7>i>;?nB^f1THP$8^$|F{EHo8Ev_XsoPaFL&JZw_0IcNY
+zxbFEga#%@BspSeBSmME{;(|M{xCey*Q}?Y1$eR)uN#r7lZJ{49Fcg!YuKf!@z?D>W
+z)cR85$w_XZGn5k>v3lpeE!keBj)ZR=|3Xjhtlx!Vuqy_?&>-h+B|vU!h{bkEJQl#x
+z+BcDa;gP*C_RL|j&*-u31gIh6W+Yw<(0$tpP(#G63&iN$o3<06hCEyTMFQ$2P;bJK
+z;x-)Ve~8pS#fDt(Ff!!2$FT{}yO5X$(Y=z<R4=7_Q@xf861|6sRX?4lnKaeMsiQv{
+bf1dvU3n4^&c3<8700000NkvXXu0mjf|5x3G
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/freeze.png b/TeamScreen/src/images/freeze.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..61e0e80ef32484f38c4e0a65fb0c9c4d3f134b84
+GIT binary patch
+literal 543
+zcmV+)0^t3LP)<h;3K|Lk000e1NJLTq001BW001Be1^@s6b9#F80005zNkl<ZSi{X%
+zzfZzI6fTIx7)*?VVPY_j&i)||j84SK!7#O0qnnc>10nnkPEL$WhChHXFgX$8<bbh1
+z;Cn}*ujQ1M(wr}ONppAa`@Vbcu6L(t39Qg?FLI`Ln=`zQW_VqA-}f%HQ6G&-g1OO(
+zmR$ny9Y_Y6F`LD6Z$L2=n~FSdx;21};}fq584HZ0wtw%OAf;~-Ko|awz8B2!CU1II
+z<n&E#)VCNDjw39>j9F)=0+3;Z_zNV@0I9?fU!k!S6Tuh?><z)E7&wZke?@zFi!7EY
+zHX>pqIAnJ8^j$zej}4w7y~cK{Coq8lEH<GYamfZ+TrCz)JuP{F4XhA0xVZUspRQDz
+z*ylSoff;0X8d?uXOOthe6d#<m{fi$=on{i(b;~~H@d6XrtQ1YZ!!Gd^i}XnMZBDYi
+z{&LLlTvFy5-&ukijaAn8dHDEqkd**|4GuQhDgn1yT7IqlE(G{E9mdzz7Kh17(RJ1W
+z1V@nZJ_(pC8}=IRW!3@&M<8IL@qf2&IcHf55FGq$`40k=mq6_z1aM2?Hf*W?5h?!_
+z`{3cjNOGA>eHdA`{4iR8D?X0>^r*X#kSV{Cktw~DE=}pRd}(?H4--A^!z5fkMNczs
+hN*|}|>tpxN^Etmq?E9zeNF)FN002ovPDHLkV1iU*?%)6b
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/refresh-hover.png b/TeamScreen/src/images/refresh-hover.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..d04627489f569f6f073ce98746bd4d29a76fc8cc
+GIT binary patch
+literal 607
+zcmV-l0-*hgP)<h;3K|Lk000e1NJLTq001BW001Be1^@s6b9#F80006eNkl<ZSi{v<
+zF-yZx5SCCxN)ahioJ5L~IEaIYlQ@Y#Ktwu=lnzePLHq$p(=<(sP=^fSR79kclSt`U
+z92}*Hh=>#?5s^~#dyq<e-b<4vZSlb^$=&yT@9yPtZ)D^@FVi%oY&ILqWHPg=s>XA<
+z+<4zfK{Tx>N?MlXYuFp?i?b(K89oV3)51X##{ql_YZ0U(dxek#-$DSA0@%9;V%{1k
+z)3Rq`!!SZ1H+>M>?GsqruE|TKl7xU02S8T;bCzP*4lD^%@T>-F3u4-E*>s!sv_oC@
+zaN;APSbP~X@HrL;`9L`q9LeD@&r(JNR{=idHjBVnMNE^xxy1%T!az7&5<you&0}8A
+z5k$<ftnqlr(5@(8k@~hl9`#CY!`vV+?+b;3MD5-n)Fyf*x8a@<xNDSSgL8Z=7K@=C
+zIQc9r5n0fFIU&t4LZ#uC+_t#~4!_2$T<J&pZ34<1ev^@=ty9mePNb>cc@N)|PXRiI
+z-C|86Z2j3BTPZS8(RF<^Z~<(g_K_|ke3J`G@bdGLwN`<M3f}o9w*)vJLX?AvsP=<g
+z@ENLq9IbLxgCw_h@2(MbG7%&>cE3)wV$2(oD*%jRlTdpEQ9=HUlCA)djVJ<c2Kqa;
+zkxvlKsp~+3jQJZ#Itw6&T}HAC=HqcB+j3pMd_F(Cp_I#n-?99zr?H%?>+minoDg<3
+t+h;SPOkd5OS<?ypY9?9(znliWz5(6G253IryVn2!002ovPDHLkV1h@>3yA;#
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/refresh.png b/TeamScreen/src/images/refresh.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..4f9261b2fc608d4bf8233c86a0dc69bc17d13c9e
+GIT binary patch
+literal 684
+zcmV;d0#p5oP)<h;3K|Lk000e1NJLTq001BW001Be1^@s6b9#F80007WNkl<ZSi@sr
+z7|KAY|2-3X?Qb#Ws=q2M)qj<^>VNUk+)~!+KXQzf|0)<O{vBkf`1hHi;{SgH{s+QO
+zfpV*vD*wiC*8Sq5ro~D?gO>s=_>F2QKK$=3(6KcfwG=u8=$jm%VPA>27{eiVfzf0^
+zvc-H&KUjc1m`}dND316E^hgxZmdkW~Vgg#e7>|LUfl;y^6vRxG|I&as3&`#UiX8>Y
+z{l%f@FVGQT#0Gl>u6PAnR=`#Nn+IolsrjP-bj)n*4*B<;rRuK%Udvgk{^)>$3|%wO
+zcZb<({zwoTiokex0Gjg}iz6-rvn&fvjX;ZbVzGQbFk5kunvQ^u&;o@ThIy6$GI06c
+z2$G*sT>KPR;0TdwIg%s1u$XyYp!qu!rtd5NO-6SuQ`O%XaxF&+)wLMrR{nLuR0+(p
+zXfAy$(DH+YbSp7J!3;~Z_M<2Q#<3WBP=P~)TA<?JLp0AFMR%nYW-$GuIQWsGVKtfq
+zUNZn|F;K;_6N=Ab38u3!d6w!wITSgd^4~->2mEGW2UZl2nhk$Z3e>!rr{M=1)g1r=
+zz_{lDN*<)8<v60?C0vrT?l%v%kN}Ep=BoQivE^VuC=mkdZIB}l)53Bb*{~NwAvijK
+zj-aZ~8AvIJpdmp`%YnZ4z*-bHePbfZ0ATeh0(9+kU=2pi$|#E{1K4VSl~BdM^Hi^n
+z>wXe0-hq}0Fklo;um;I5vKu7Kgc>9;01Wmz0!^}wK#S@~Y?4I~9e@0d-v_QyiWU--
+zHp_35)htJeS5U{KlDv)yC#4+|G>3q?W@Vr@B95-vb5Nl}^{yE%K=;lmwE+N`Gs7Es
+S#8nCa0000<MNUMnLSTZFZ!%&4
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/resume-hover.png b/TeamScreen/src/images/resume-hover.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..f4311a68913d434130d44ce9a46cdaff8f7c6db8
+GIT binary patch
+literal 615
+zcmV-t0+{`YP)<h;3K|Lk000e1NJLTq001BW001Be1^@s6b9#F80006mNkl<ZSi{9v
+zu}%U(5WRxJ5DQ~rhy{feg@u)sUtvLIs0<Z_p|YSeh6FeWByb_*YD+6B3kxbktO*6N
+zup-35P!J2EZ^#}F>mIjzoViUVx$Mq+GkY^TvujxfqgJb(R;$%QrBZPrPmrMy`gUoJ
+zbWAt{N4;L(2k{LIj3D2dG9nCNcQOu=YmiM149hYl4r9Z%Z65;MR}d~CFAy8VdB~-Z
+zJk5!<r2^L{PTe@C0T@dJa~LUuB(33mnsf;xag2#O2z&&^i3EJad@96WOc7S%nve}8
+zpxJCDpfKP7?Bq6F_WTawkenEhEtO(PGG5%(IO8r#+@%c#5%&dCaQ(<|w9Z00;W8%{
+z8~K2VHd}n(c7DYfe}IlrUJxg7Gdpd*FlW2pdTv=k`ot~@j^iY>Jh0YvWqq<%8^vUn
+zO@1Ij_B0*v<Q18HuHyi4lMS}nED`n?nHxmnQ<9e;a~h4tfd-!ELeCP-#PcW@(t&m9
+zMOdx^!jNP7Ln54c695PPN}Z+zBhQF$MujIEOm}AS+KpJAMB#vtFF11FYPFIaPd0ey
+z{?h@HH*j7AIS_dW#O}+;`lO6kg&@i#T*V)|%=qC|N!X3x7;2pWf#=7t8$}_~t^vwI
+zv_mO2s)FM8|1HIW)TkLzAD|m>r_<5y1HR3OhDkey?j6XEbq%xK`?q7E5Z{G_M(kHI
+z8nIqVy%FoRoRP%$Fp=UH&(n;LSRbc~{D}N{{sZxGpNcB))p7s;002ovPDHLkV1g?I
+B3L*di
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/resume.png b/TeamScreen/src/images/resume.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..44dff44959d94cb745f282b049e36c2e1221b3c3
+GIT binary patch
+literal 667
+zcmV;M0%ZM(P)<h;3K|Lk000e1NJLTq001BW001Be1^@s6b9#F80007FNkl<ZSi{9v
+zy-UMD6i>9)4=RX)h(iY_2L~r7{|bjr;v`NT#HrQ#0V16oMWl3gbaLw8&`FAO=};V;
+zia3afA8k^9?|MyM(zLmxl{^T9yL-R)yZ3c>nifD}hsK(oHPd>=ENU6Egs&pM5{=Ou
+ztqFqZE0eiq0>Jw)Qq?l;w%TV_Nr!ZYGCr0yb^+E<H{3&{Auxi<#8GP=F1_~vH1IuQ
+z?h-rP8_Swo^wB?!(OhSZQ;)C+Q!&o1BtU8|!yhn`2S`$Ze3I6ZjtiqEuzi#lv9Ru9
+ze~0m<5MEp&T^EVEu;C@MXWua>l-c4o+?xrPJ+=r8V6hFA$(Gl`9A}H<IT+TsjSVaZ
+zHf(W`asRSdW>M#T1f{hehJ?Vhz5C_J2e{>mO}<PXxBAwv-l_3h5DAnQ0u$IQ6jySh
+zncx`<_YACC-D*hY`}m=eUd(^Slo*Im0Gm~ou#LeK8+@BN{hd-HVD01ynZ2PxKw!fL
+z+iZ#e3k<C22cmnnWYa*RT~D9<&MD{@nZ1J6IZP}@JK+e}trub0_6frdTVEjpuiXJC
+z`?^wBIFyj25Aj@U)k|O4unD|symv!sWfTM?_z%KzkvRLA;rhY`KU@BffQa!k5_Hp#
+zz{o=&cb|9fzF!DNn1qAl@0o-Eycxa>)ha;h^D?{{x)BBG0iKO0d@Byt1*Q9YTd@Rn
+z9!3K$lN|!)J9eF3xKKX_1g6(vL=xmUMx4*%x#qH}VT<^n<5;>Ux(f+O<X1A1NH3*b
+ziS%0DmH0nAOya5!6KDJ)dYW;G^l{poAESSs{{eFzQQg&8Rm%VX002ovPDHLkV1iTr
+BFX;dP
+
+literal 0
+HcmV?d00001
+
+-- 
+2.39.5 (Apple Git-154)
+

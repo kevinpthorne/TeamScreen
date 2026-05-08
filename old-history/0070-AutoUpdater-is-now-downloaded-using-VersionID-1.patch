@@ -1,0 +1,67 @@
+From bccfb76d043226261c37663bf0e4893e48b55392 Mon Sep 17 00:00:00 2001
+From: Mitch Talmadge <mitcht@aptitekk.com>
+Date: Wed, 30 Jul 2014 02:52:43 -0600
+Subject: [PATCH 070/101] AutoUpdater is now downloaded using VersionID -1
+
+---
+ .../AutoUpdaterDownloadThread.java            | 37 +------------------
+ 1 file changed, 1 insertion(+), 36 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
+index ecacee4..03c7b3a 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
+@@ -26,7 +26,7 @@ public class AutoUpdaterDownloadThread extends Thread
+     public void run()
+     {
+ 	URLUtils.addProgressListener(new DownloadDialog(amountToUpdate+1));
+-	if(downloadAutoUpdater())
++	if(downloadUpdate(-1))
+ 	{
+ 	    for(int i = 1; i <= amountToUpdate; i++)
+ 	    {
+@@ -36,41 +36,6 @@ public class AutoUpdaterDownloadThread extends Thread
+ 	}
+     }
+     
+-    private boolean downloadAutoUpdater()
+-    {
+-	String POSTData = "versionID=0&modType=AutoUpdater&handShake="
+-		+ this.handShake.getHandShakeResult();
+-	
+-	URLConnection connection = this.sendPOSTGetConnection(
+-		AutoUpdater.updaterURLPrefix
+-		+ AutoUpdater.updaterFileTransferSuffix, POSTData);
+-	
+-	if(connection != null)
+-	{
+-	    String contentDisposition = connection.getHeaderField("Content-Disposition");
+-	    if(contentDisposition == null)
+-	    {
+-		String result = URLUtils.getStringFromConnection(connection);
+-		for(DLProgressListener listener : URLUtils.getProgressListenerList())
+-		{
+-		    listener.downloadFailed("Server-Sided Error.");
+-		}
+-		System.out
+-		.println("Could not download AutoUpdater.\n    (Result was: "
+-			+ result + ")");
+-		return false;
+-	    }
+-	    String filename = contentDisposition.substring(contentDisposition.indexOf("\"")+1, contentDisposition.lastIndexOf("\""));
+-	    
+-	    this.autoUpdater = URLUtils.getFileFromConnection(connection,
+-		    AutoUpdater.getAbsDir() + "/" + filename);
+-	    if(autoUpdater == null)
+-		return false;
+-	    return true;
+-	}
+-	return false;
+-    }
+-    
+     private boolean downloadUpdate(int versionID)
+     {
+ 	String POSTData = "versionID=" + versionID + "&modType="
+-- 
+2.39.5 (Apple Git-154)
+

@@ -1,0 +1,1065 @@
+From 42b1e409b5ee433f70704f22a132d7ccd6acd3e0 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 13 Apr 2014 15:43:41 -0600
+Subject: [PATCH 033/101] Updated so whenever the window moves server-side, the
+ recording area is updated...hopefully
+
+---
+ .../aptitekk/TeamScreen/Net/NetHandler.java   |   8 +-
+ ....java => DynamicJRCServerApplication.java} |  64 ++--
+ .../TeamScreen/Net/jrc/JRCClient.java         |   1 +
+ .../TeamScreen/Net/jrc/JRCServerHandler.java  |   4 +-
+ .../jrc/Server/DynamicControlConnection.java  | 140 ++++++++
+ .../Server/DynamicRemoteControlServer.java    | 310 ++++++++++++++++++
+ .../Net/jrc/Server/DynamicScreenRecorder.java | 240 ++++++++++++++
+ .../{ => Server}/WindowControlAdapter.java    |   2 +-
+ .../{ => Server}/WindowScreenRecorder.java    |  45 +--
+ 9 files changed, 754 insertions(+), 60 deletions(-)
+ rename TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/{JRCServerApplication.java => DynamicJRCServerApplication.java} (64%)
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicControlConnection.java
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicRemoteControlServer.java
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicScreenRecorder.java
+ rename TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/{ => Server}/WindowControlAdapter.java (92%)
+ rename TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/{ => Server}/WindowScreenRecorder.java (73%)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
+index b21088d..4b5b0b2 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
+@@ -16,7 +16,7 @@ import com.aptitekk.TeamScreen.Net.Broker.TeamScreenBrokerThread;
+ import com.aptitekk.TeamScreen.Net.Listeners.ListenerHandler;
+ import com.aptitekk.TeamScreen.Net.Listeners.PacketListener;
+ import com.aptitekk.TeamScreen.Net.jrc.JRCClient;
+-import com.aptitekk.TeamScreen.Net.jrc.JRCServerApplication;
++import com.aptitekk.TeamScreen.Net.jrc.DynamicJRCServerApplication;
+ import com.aptitekk.TeamScreen.Net.jrc.JRCServerHandler;
+ import com.aptitekk.TeamScreen.Util.WindowInfo;
+ import com.aptitekk.TeamScreen.Window.Util.JArrowButton;
+@@ -39,7 +39,7 @@ public class NetHandler {
+ 	protected PacketProcessor packetProcessor;
+ 	protected Thread broadcastThread;
+ 	protected ArrayList<TeamScreenBrokerThread> brokerThreads = new ArrayList<TeamScreenBrokerThread>();
+-	protected ArrayList<JRCServerApplication> jrcServerThreads = new ArrayList<JRCServerApplication>();
++	protected ArrayList<DynamicJRCServerApplication> jrcServerThreads = new ArrayList<DynamicJRCServerApplication>();
+ 	protected ArrayList<JRCClient> jrcClientThreads = new ArrayList<JRCClient>();
+ 	
+ 	public NetHandler(TeamScreenDaemon parent) {
+@@ -187,12 +187,12 @@ public class NetHandler {
+     } 
+ 	
+ 	public void startNewJRCServer(WindowInfo w) {
+-		JRCServerApplication t = new JRCServerApplication(w);
++		DynamicJRCServerApplication t = new DynamicJRCServerApplication(w);
+ 		this.jrcServerThreads.add(t);
+ 		t.start();
+ 	}
+ 	public void stopJRCServers() {
+-		for(JRCServerApplication t : this.jrcServerThreads) {
++		for(DynamicJRCServerApplication t : this.jrcServerThreads) {
+ 			t.interrupt();
+ 			this.jrcServerThreads.remove(t);
+ 		}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCServerApplication.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+similarity index 64%
+rename from TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCServerApplication.java
+rename to TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+index 809e51b..f9f552d 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCServerApplication.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+@@ -6,47 +6,48 @@ import java.util.Arrays;
+ import java.util.List;
+ 
+ import org.one.stone.soup.remote.control.server.ControlAdapter;
+-import org.one.stone.soup.remote.control.server.DesktopControlAdapter;
+-import org.one.stone.soup.remote.control.server.RemoteControlHubConnection;
+-import org.one.stone.soup.remote.control.server.RemoteControlServer;
+-import org.one.stone.soup.remote.control.server.RemoteControlServerApplication;
+-import org.one.stone.soup.screen.recorder.ScreenRecorder;
+ import org.one.stone.soup.screen.recorder.ScreenRecorderListener;
+ 
+ import com.aptitekk.TeamScreen.TeamScreenDaemon;
+ import com.aptitekk.TeamScreen.Net.Broadcaster.TeamScreenBroadcastThread;
++import com.aptitekk.TeamScreen.Net.jrc.Server.DynamicRemoteControlServer;
++import com.aptitekk.TeamScreen.Net.jrc.Server.DynamicScreenRecorder;
++import com.aptitekk.TeamScreen.Net.jrc.Server.WindowControlAdapter;
++import com.aptitekk.TeamScreen.Net.jrc.Server.WindowScreenRecorder;
+ import com.aptitekk.TeamScreen.Util.WindowInfo;
+ import com.aptitekk.TeamScreen.Window.Util.WindowUtil;
+ import com.aptitekk.TeamScreen.Window.Util.WindowUtil.WindowNotFoundException;
+ 
+ /**
+- * Java Remote Control Server Application
++ * Java Dynamic Remote Control Server Application<br>
++ * Modified from the <i>RemoteControlServerApplication</i> class
+  *
+- * @author kevint.
++ * @author kevint, Nicholas Cross
+  *         Created Apr 6, 2014.
+  */
+-public class JRCServerApplication extends Thread implements RemoteControlServerApplication{
++public class DynamicJRCServerApplication extends Thread {
+ 	
+ 	private static WindowInfo window;
+-	private RemoteControlServer server;
++	private DynamicRemoteControlServer server;
+ 	private boolean serverRunning = false;
+ 	private static boolean threadRunning = false;
+ 	
++	private static DynamicJRCServerApplication instance;
++	
+ 	private Thread windowUpdater;
+ 	
+ 	private WindowControlAdapter controlAdapter;
+-	private ScreenRecorder screenRecorder;
++	private WindowScreenRecorder screenRecorder;
+ 	
+-	public JRCServerApplication(WindowInfo w) {
+-		JRCServerApplication.window = w;
++	public DynamicJRCServerApplication(WindowInfo w) {
++		DynamicJRCServerApplication.window = w;
++		instance = this;
+ 	}
+ 
+-	@Override
+ 	public Frame getRootFrame() {
+ 		return null;
+ 	}
+ 
+-	@Override
+ 	public void disconnect() {
+ 		stopServer();
+ 		this.serverRunning = false;
+@@ -54,18 +55,21 @@ public class JRCServerApplication extends Thread implements RemoteControlServerA
+ 	
+ 	@Override
+ 	public void run() {
+-		JRCServerApplication.threadRunning = true;
++		DynamicJRCServerApplication.threadRunning = true;
+ 		try {
+ 			this.windowUpdater = new Thread() {
+ 				public void run() {
+-					try {
+-						while(threadRunning)
++					while(threadRunning) {
++						try {
+ 							window = WindowUtil.updateWindow(window);
+-						this.interrupt();
+-					} catch (WindowNotFoundException exception) {
+-						exception.printStackTrace();
+-						this.interrupt();
++							screenRecorder.updateWindow(window);
++						} catch (WindowNotFoundException e) {
++							//e.printStackTrace();
++							break;
++						}
+ 					}
++					instance.interrupt();
++					this.interrupt();
+ 				}
+ 			};
+ 			this.windowUpdater.start();
+@@ -78,8 +82,8 @@ public class JRCServerApplication extends Thread implements RemoteControlServerA
+ 	
+ 	@Override
+ 	public void interrupt() {
+-		threadRunning = false;
+-		stopServer();
++		this.windowUpdater.interrupt();
++		disconnect();
+ 		super.interrupt();
+ 	}
+ 	
+@@ -106,26 +110,24 @@ public class JRCServerApplication extends Thread implements RemoteControlServerA
+ 		TeamScreenDaemon.logger.info("RCD Server Stopped");
+ 	}
+ 
+-	@Override
+ 	public void setRequester(String requester) {
+ 		TeamScreenDaemon.logger.info("Connected to by: " + requester);
+ 		
+ 	}
+ 
+-	@Override
+ 	public ControlAdapter getControlAdapter() {
+ 		return this.controlAdapter;
+ 	}
+ 	
+ 	private ControlAdapter createControlAdapter() {
+-		this.controlAdapter = new WindowControlAdapter(JRCServerApplication.window);
++		this.controlAdapter = new WindowControlAdapter(DynamicJRCServerApplication.window);
+ 		return this.controlAdapter;
+ 	}
+ 
+-	@Override
+-	public ScreenRecorder getScreenRecorder(OutputStream outputStream,
++	public DynamicScreenRecorder getScreenRecorder(OutputStream outputStream,
+ 			ScreenRecorderListener listener) {
+-		return new WindowScreenRecorder(outputStream, listener, JRCServerApplication.window);
++		this.screenRecorder = new WindowScreenRecorder(outputStream, listener, DynamicJRCServerApplication.window);
++		return this.screenRecorder;
+ 	}
+ 	
+ 	private void initialiseServer() throws Exception
+@@ -137,7 +139,7 @@ public class JRCServerApplication extends Thread implements RemoteControlServerA
+         Integer[] ports = new Integer[]{4455, 4456, 4457, 4458, 4459, 4460};
+         int port = ports[slots.indexOf(TeamScreenDaemon.properties.getConfig().getProperty("Slot"))];
+ 		
+-		this.server = new RemoteControlServer(this);
++		this.server = new DynamicRemoteControlServer(this);
+ 		this.server.setAutoAccept(true);
+ 		this.server.start("Remote Control Server",address,port,2,1000);
+ 		
+@@ -150,7 +152,7 @@ public class JRCServerApplication extends Thread implements RemoteControlServerA
+ 	}
+ 
+ 	public void updateWindowRect(WindowInfo info) {
+-		JRCServerApplication.window = info;
++		DynamicJRCServerApplication.window = info;
+ 		this.controlAdapter.updateWindow(info);
+ 	}
+ 
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
+index 685625f..17bebe0 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
+@@ -256,6 +256,7 @@ public class JRCClient extends Thread implements RemoteClientController,MouseLis
+ 		packet.addAttribute("x",""+e.getX());
+ 		packet.addAttribute("y",""+e.getY());
+ 		sendCommand(packet);
++		System.out.println(e.getX() +","+ e.getY());
+ 	}
+ 
+ 	@Override
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCServerHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCServerHandler.java
+index b4cedfc..6710754 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCServerHandler.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCServerHandler.java
+@@ -16,12 +16,12 @@ import com.aptitekk.TeamScreen.Util.WindowInfo;
+ public class JRCServerHandler extends Thread{
+ 	
+ 	private NetHandler netHandler;
+-	JRCServerApplication server;
++	DynamicJRCServerApplication server;
+ 	static boolean running = false;
+ 	
+ 	public JRCServerHandler(NetHandler master, WindowInfo w) {
+ 		this.netHandler = master;
+-		this.server = new JRCServerApplication(w);
++		this.server = new DynamicJRCServerApplication(w);
+ 	}
+ 	
+ 	@Override
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicControlConnection.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicControlConnection.java
+new file mode 100644
+index 0000000..0684bd2
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicControlConnection.java
+@@ -0,0 +1,140 @@
++package com.aptitekk.TeamScreen.Net.jrc.Server;
++
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.OutputStream;
++
++import org.one.stone.soup.remote.control.server.ControlAdapter;
++import org.one.stone.soup.xml.XmlElement;
++import org.one.stone.soup.xml.XmlParser;
++import org.one.stone.soup.xml.stream.XmlLoader;
++
++/**
++ * Continuity with the rest of the Dynamic Screen Recording system<br>
++ * Modified from the original <i>ControlConnection</i>
++ * 
++ * @author kevint, Nicholas Cross
++ *
++ */
++
++public class DynamicControlConnection implements Runnable{
++	
++	private OutputStream oStream;
++	private InputStream iStream;
++	private Thread thread;
++	private boolean running = false;
++	private boolean fullControl = false;
++	private DynamicRemoteControlServer server;
++	private ControlAdapter adapter;
++
++	public DynamicControlConnection(DynamicRemoteControlServer server,
++			OutputStream oStream,InputStream iStream,boolean fullControl,ControlAdapter adapter)
++	{
++		this.adapter = adapter;
++		this.fullControl = fullControl;
++		this.server = server;
++		this.iStream = iStream;
++		this.oStream = oStream;
++	}
++	
++	public void process()
++	{
++		thread = new Thread(this,"Control Thread");
++		thread.start();
++	}
++	
++	public void run()
++	{
++		try{
++			XmlParser parser = XmlLoader.getStandardParser();
++			XmlElement packet = null;
++			
++			running = true;
++			
++			while(running)
++			{
++				packet = parser.parseElement(iStream);
++				
++				if(packet==null)
++				{
++					break;
++				}
++				//System.out.println("Request:"+packet.toXml());
++				
++				if(packet.getName().equals("nextFrame"))
++				{
++					server.setReadyForFrame();
++				}
++				else if(packet.getName().equals("sendKeyFrame"))
++				{
++					server.sendKeyFrame();
++				}
++				else if(fullControl) 
++				{
++					if(packet.getName().equals("keyPressed"))
++					{
++						adapter.keyPress( Integer.parseInt(packet.getAttributeValueByName("code")) );
++					}
++					else if(packet.getName().equals("keyReleased"))
++					{
++						adapter.keyRelease( Integer.parseInt(packet.getAttributeValueByName("code")) );
++					}
++					else if(packet.getName().equals("mouseMoved"))
++					{
++						adapter.mouseMove( Integer.parseInt(packet.getAttributeValueByName("x")),Integer.parseInt(packet.getAttributeValueByName("y")));
++					}
++					else if(packet.getName().equals("mousePressed"))
++					{
++						adapter.mousePress( Integer.parseInt(packet.getAttributeValueByName("code")) );
++					}
++					else if(packet.getName().equals("mouseReleased"))
++					{
++						adapter.mouseRelease( Integer.parseInt(packet.getAttributeValueByName("code")) );
++					}
++				}
++			}
++			
++			running = false;
++		}
++		catch(Exception e)
++		{
++			e.printStackTrace();
++		}
++
++		try{ iStream.close(); }catch(Exception e){}
++		server.disconnect();
++	}
++	
++	public void sendFrameMarker(boolean fullFrame) throws IOException
++	{
++		if(running==false)
++		{
++			return;
++		}
++		if(fullFrame)
++		{
++			oStream.write( "<fullFrame/>".getBytes() );
++		}
++		else
++		{
++			oStream.write( "<frame/>".getBytes() );
++		}
++		oStream.flush();
++	}
++	
++	public void stop()
++	{
++		try{
++			running = false;
++			iStream.close();
++		}
++		catch(Exception e){}
++		
++		/*try{
++			thread.stop();
++		}
++		catch(Exception e)
++		{}*/
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicRemoteControlServer.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicRemoteControlServer.java
+new file mode 100644
+index 0000000..b76b324
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicRemoteControlServer.java
+@@ -0,0 +1,310 @@
++package com.aptitekk.TeamScreen.Net.jrc.Server;
++
++import java.io.IOException;
++import java.io.InputStream;
++import java.io.OutputStream;
++import java.net.Socket;
++
++import javax.swing.JOptionPane;
++
++import org.one.stone.soup.io.Connection;
++import org.one.stone.soup.net.SocketConnection;
++import org.one.stone.soup.screen.recorder.ScreenRecorderListener;
++import org.one.stone.soup.server.PlainServer;
++import org.one.stone.soup.server.RouterThread;
++import org.one.stone.soup.stringhelper.StringGenerator;
++
++import com.aptitekk.TeamScreen.Net.jrc.DynamicJRCServerApplication;
++
++
++/**
++ * Allows the server to dynamically update the screen recording area <br>
++ * Modified from the original <i>RemoteControlServer</i>
++ * 
++ * @author kevint, Nicholas Cross
++ */
++public class DynamicRemoteControlServer extends PlainServer implements ScreenRecorderListener {
++	
++	private String connectionId;
++	private String key;
++	private String requester;
++	private boolean hasConnection = false;
++	private boolean autoAccept = false;
++	private boolean readyForFrame = false;
++	
++	private int framesInProgress = 0;
++	
++	private DynamicScreenRecorder screenRecorder;
++	private DynamicJRCServerApplication owner;
++	private DynamicControlConnection controlConnection;
++		
++	public DynamicRemoteControlServer(DynamicJRCServerApplication owner)
++	{
++		this.owner = owner;
++	}
++	
++	public void setAutoAccept(boolean state)
++	{
++		autoAccept = state;
++	}
++	
++	/* (non-Javadoc)
++	 * @see wet.wired.server.Server#route(java.net.Socket, wet.wired.server.RouterThread)
++	 */
++	public void route(Socket socket, RouterThread routerThread) {
++		
++		try{
++			SocketConnection connection = new SocketConnection( socket,socket.getInetAddress().getHostAddress() );
++			route( connection,routerThread );
++		}
++		catch(Exception e)
++		{
++			e.printStackTrace();
++		}
++	}
++
++	public void route(Connection connection, RouterThread routerThread) {
++		try{
++					
++			if(hasConnection)
++			{
++				System.out.println("Connection Requested for "+connection.getAlias());
++
++				if(connection.getAlias().equals(connectionId))
++				{
++					String testKey = readLine(connection.getInputStream());
++					
++					if(!testKey.toString().equals(key))
++					{
++						try
++						{
++							connection.close();
++						} catch(Exception e){}
++						return;
++					}
++					System.out.println("Request Key Passed");
++					
++					String connectionType = readLine(connection.getInputStream());
++					
++					if(routerThread!=null)
++					{
++						routerThread.stopTimer();
++					}
++					System.out.println("Connection Requested Type "+connectionType);
++					
++					openConnection( connectionType.toString(),connection,requester );
++
++					System.out.println("Connection created. Type "+connectionType);
++				}
++			}
++			else
++			{
++				InputStream iStream = connection.getInputStream();
++					
++				requester = readLine(iStream);
++				
++				if( autoAccept==false && JOptionPane.showConfirmDialog(owner.getRootFrame(),"Accept Connection from "+requester)!=JOptionPane.OK_OPTION )
++				{
++					try
++					{
++						connection.close();
++					} catch(Exception e){}
++					return;
++				}
++				else
++				{
++					key = StringGenerator.generateUniqueId();
++					connection.getOutputStream().write( (key+'\n').getBytes() );
++					connection.getOutputStream().flush();
++					
++					owner.setRequester( requester );			
++				}
++	
++				//int identifier = socket.getInputStream().read();
++				hasConnection = true;
++				connectionId = connection.getAlias();
++				
++				if(routerThread!=null)
++				{
++					routerThread.stopTimer();
++				}
++				
++				screenRecorder = owner.getScreenRecorder(connection.getOutputStream(),this);
++				
++				//frameRecorded(); //wait for client frame request
++				
++				screenRecorder.startRecording();
++
++				System.out.println("Screen Recorder Started for "+connectionId);				
++			}
++		}
++		catch(Exception e)
++		{
++		}
++		finally
++		{
++		}
++	}
++	
++	/* (non-Javadoc)
++	 * @see wet.wired.server.Server#initialize()
++	 */
++	public void initialize() {	}
++
++	private void openConnection(String command,Connection connection,String requester)
++	{
++		if(command.equals("fullControl"))
++		{
++			try{
++				openControlConnection(connection.getOutputStream(),connection.getInputStream(),requester,true);
++			}
++			catch(Exception e){}
++		}
++		else
++		{
++			try{
++				openControlConnection(connection.getOutputStream(),connection.getInputStream(),requester,false);
++			}
++			catch(Exception e){}
++		}
++	}
++	
++/*	private void openConnection(String command,Socket socket,String requester)
++	{
++		if(command.equals("fullControl"))
++		{
++			try{
++				openControlConnection(socket.getOutputStream(),socket.getInputStream(),requester,true);
++			}
++			catch(Exception e){}
++		}
++		else
++		{
++			try{
++				openControlConnection(socket.getOutputStream(),socket.getInputStream(),requester,false);
++			}
++			catch(Exception e){}
++		}
++	}*/
++	
++	private void openControlConnection(OutputStream oStream,InputStream iStream,String requester,boolean fullControl)
++	{
++		if( autoAccept==false && fullControl==true)
++		{
++			if(JOptionPane.showConfirmDialog(owner.getRootFrame(),"Accept Control by "+requester)!=JOptionPane.OK_OPTION )
++			{
++				fullControl=false;
++			}
++		}
++		try
++		{
++			controlConnection = new DynamicControlConnection(this,oStream,iStream,fullControl,owner.getControlAdapter());
++			controlConnection.process();
++		} catch(Exception e){}
++	}
++	
++	public void stop()
++	{
++		super.stop();
++		disconnect();
++	}
++	
++	public void disconnect()
++	{
++		if(screenRecorder!=null)
++		{
++			screenRecorder.stopRecording();
++		}
++		screenRecorder = null;
++
++		setReadyForFrame();
++		
++		if(controlConnection!=null)
++		{
++			controlConnection.stop();
++			controlConnection=null;
++		}
++					
++		hasConnection=false;
++		System.out.println("Disconnected");
++
++		owner.disconnect();
++	}
++	
++	public void setReadyForFrame()
++	{
++		readyForFrame=true;
++		framesInProgress--;
++	}
++
++	public void sendKeyFrame()
++	{
++		screenRecorder.sendKeyFrame();
++	}
++	
++	public void frameRecorded(boolean fullFrame) throws IOException
++	{	
++		int count=0;
++		while( controlConnection==null && count<500)
++		{
++			try{ Thread.sleep(10); }catch(Exception e){}
++			count++;
++		}
++		if(count==500)
++		{
++			throw new IOException( "Frame timeout" );
++		}
++		
++		try{
++			controlConnection.sendFrameMarker(fullFrame);
++		}
++		catch(Exception e)
++		{
++			e.printStackTrace();
++			disconnect();
++			return;
++		}
++		
++		framesInProgress++;
++		count=0;
++		while(framesInProgress>2 && screenRecorder.isRecording() && count<500)
++		{
++			try{ Thread.sleep(10); }catch(Exception e){}
++			count++;
++		}
++		if(count==500)
++		{
++			throw new IOException( "Frame timeout" );
++		}
++		
++		readyForFrame=false;
++	}
++
++	public void recordingStopped() {
++		disconnect();
++	}
++
++	public static String readLine(InputStream iStream) throws IOException
++	{
++		int in = iStream.read();
++		StringBuffer buffer = new StringBuffer();
++		while(in!=-1 && in!='\n' && buffer.length()<100)
++		{
++			if(in!=0) // keep alive byte
++			{
++				buffer.append((char)in);
++			}
++						
++			in = iStream.read();
++		}
++		
++		return buffer.toString();
++	}
++	
++	public static void writeLine(String line,OutputStream outputStream) throws IOException
++	{
++		outputStream.write( (line+"\n").getBytes() );
++		outputStream.flush();				
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicScreenRecorder.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicScreenRecorder.java
+new file mode 100644
+index 0000000..0b87384
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicScreenRecorder.java
+@@ -0,0 +1,240 @@
++package com.aptitekk.TeamScreen.Net.jrc.Server;
++
++import java.awt.Rectangle;
++import java.awt.image.BufferedImage;
++import java.io.IOException;
++import java.io.OutputStream;
++
++import org.one.stone.soup.screen.recorder.FrameCompressor;
++import org.one.stone.soup.screen.recorder.ScreenRecorderListener;
++import org.one.stone.soup.util.Queue;
++
++/**
++ * This special type of Screen recorder makes it so we can update the screen area
++ * with a special server<br>
++ * Modified originally from the <i>ScreenRecorder</i> class
++ * 
++ * @author kevint, Nicholas Cross
++ */
++public abstract class DynamicScreenRecorder implements Runnable {
++	
++	private Rectangle recordArea;
++	
++	private int frameSize;
++	private int[] rawData;
++	
++	private OutputStream oStream;
++	
++	private boolean recording = false;
++	private boolean running = false;
++
++	private long startTime;
++	private long frameTime;
++	private boolean reset;
++	
++	private ScreenRecorderListener listener;
++	
++	public abstract BufferedImage captureScreen(Rectangle recordArea);
++	public abstract Rectangle initialiseScreenCapture();
++	public abstract Rectangle updateRecordingArea();
++
++	private class DataPack
++	{
++		public DataPack(int[] newData,long frameTime)
++		{
++			this.newData = newData;
++			this.frameTime = frameTime;
++		}
++		public long frameTime;
++		public int[] newData;
++	}
++	
++	private class StreamPacker implements Runnable
++	{	
++		private Queue queue = new Queue();
++		private FrameCompressor compressor;
++		
++		public StreamPacker( OutputStream oStream,int frameSize )
++		{
++			compressor = new FrameCompressor( oStream,frameSize );
++			
++			new Thread(this,"Stream Packer").start();
++		}
++		
++		public void packToStream( DataPack pack )
++		{
++			while(queue.size()>2)
++			{
++				try{ Thread.sleep(10); }catch(Exception e){}
++			}
++			queue.post( pack );
++		}
++		
++		public void run()
++		{
++			while(recording)
++			{
++				while( queue.isEmpty()==false )
++				{
++					DataPack pack = (DataPack)queue.get();
++					try{
++						compressor.pack( pack.newData,pack.frameTime,reset );
++						
++						if(reset==true)
++						{
++							reset=false;
++						}
++					}
++					catch(Exception e)
++					{
++						e.printStackTrace();
++						try{ oStream.close(); }catch(Exception e2){}
++						return;
++					}
++				}
++				while(queue.isEmpty()==true)
++				{
++					try{Thread.sleep(50);}catch(Exception e){}
++				}
++			}
++		}
++	}
++	private StreamPacker streamPacker;
++	
++	public DynamicScreenRecorder(OutputStream oStream,ScreenRecorderListener listener)
++	{
++		this.listener = listener;
++		this.oStream = oStream;
++	}
++
++	public void triggerRecordingStop()
++	{
++		recording = false;
++	}
++	
++	public synchronized void run()
++	{
++		startTime = System.currentTimeMillis();
++		
++		recording = true;
++		running = true;
++		long lastFrameTime=0;
++		long time = 0;
++		
++		frameSize = recordArea.width*recordArea.height;
++		streamPacker = new StreamPacker( oStream,frameSize );
++		
++		while( recording )
++		{
++			recordArea = updateRecordingArea();
++			time = System.currentTimeMillis();
++			while(time-lastFrameTime<200)
++			{
++				try{Thread.sleep(50);}catch(Exception e){}
++				time = System.currentTimeMillis();	
++			}
++			lastFrameTime = time;
++			
++			try{
++				recordFrame();
++			}
++			catch(Exception e)
++			{
++				e.printStackTrace();
++				try{ oStream.close(); }catch(Exception e2){}
++				break;
++			}
++		}
++		
++		running = false;
++		recording = false;
++		
++		listener.recordingStopped();
++	}
++	
++	public void recordFrame() throws IOException
++	{
++		//long t1 = System.currentTimeMillis();
++		BufferedImage bImage = captureScreen(recordArea);
++		frameTime = System.currentTimeMillis()-startTime;
++		//long t2 = System.currentTimeMillis();
++
++		rawData = new int[frameSize];
++
++		bImage.getRGB(0,0,recordArea.width,recordArea.height,rawData,0,recordArea.width);
++		//long t3 = System.currentTimeMillis();
++		
++		//packToStream(rawData,newRawData);
++		streamPacker.packToStream( new DataPack(rawData,frameTime) );
++		//long t4 = System.currentTimeMillis();
++		
++		/*System.out.println("Times");
++		System.out.println("  capture time:"+(t2-t1));
++		System.out.println("  data grab time:"+(t3-t2));
++		System.out.println("  pack time:"+(t4-t3));*/
++		
++		listener.frameRecorded(false);
++	}
++
++	public void startRecording()
++	{		
++		recordArea = initialiseScreenCapture();
++		
++		if(recordArea==null)
++		{
++			return;
++		}
++		try{
++			oStream.write( (recordArea.width & 0x0000FF00) >>>8 );
++			oStream.write( (recordArea.width & 0x000000FF) );
++		
++			oStream.write( (recordArea.height & 0x0000FF00) >>>8 );
++			oStream.write( (recordArea.height & 0x000000FF) );
++		}
++		catch(Exception e)
++		{
++			e.printStackTrace();		
++		}		
++		
++		new Thread(this,"Screen Recorder").start();
++	}
++
++	public void stopRecording()
++	{
++		triggerRecordingStop();
++		
++		int count = 0;
++		while(running == true && count<10)
++		{
++			try{ Thread.sleep(100);
++			}catch(Exception e){}
++			count++;
++		}
++		
++		try{
++			oStream.flush();
++			oStream.close();
++		}
++		catch(Exception e){
++			e.printStackTrace();
++		}
++	}
++	public Rectangle getRecordArea() {
++		return recordArea;
++	}
++	
++	public boolean isRecording()
++	{
++		return recording;
++	}
++	
++	public void sendKeyFrame()
++	{
++		reset=true;
++	}
++
++	public int getFrameSize() {
++		return frameSize;
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowControlAdapter.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowControlAdapter.java
+similarity index 92%
+rename from TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowControlAdapter.java
+rename to TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowControlAdapter.java
+index fa5143c..8fd7556 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowControlAdapter.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowControlAdapter.java
+@@ -1,4 +1,4 @@
+-package com.aptitekk.TeamScreen.Net.jrc;
++package com.aptitekk.TeamScreen.Net.jrc.Server;
+ 
+ import java.awt.Point;
+ import java.awt.Rectangle;
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowScreenRecorder.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowScreenRecorder.java
+similarity index 73%
+rename from TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowScreenRecorder.java
+rename to TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowScreenRecorder.java
+index 9043a29..93f7313 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowScreenRecorder.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/WindowScreenRecorder.java
+@@ -1,42 +1,26 @@
+-package com.aptitekk.TeamScreen.Net.jrc;
++package com.aptitekk.TeamScreen.Net.jrc.Server;
+ 
+ import java.awt.AWTException;
+ import java.awt.Color;
+-import java.awt.Dimension;
+ import java.awt.Graphics2D;
+ import java.awt.MouseInfo;
+ import java.awt.Point;
+ import java.awt.Polygon;
+ import java.awt.Rectangle;
+ import java.awt.Robot;
+-import java.awt.Toolkit;
+ import java.awt.image.BufferedImage;
+ import java.io.OutputStream;
+ 
+-import org.one.stone.soup.screen.recorder.ScreenRecorder;
+ import org.one.stone.soup.screen.recorder.ScreenRecorderListener;
+ 
+ import com.aptitekk.TeamScreen.Util.WindowInfo;
+ 
+-/**
+- * Records a given window
+- *
+- * @author kevint.
+- *         Created Apr 6, 2014.
+- */
+-public class WindowScreenRecorder extends ScreenRecorder{
++public class WindowScreenRecorder extends DynamicScreenRecorder{
+ 	
+ 	private Robot robot;
+ 	private WindowInfo window;
+-
+-	/**
+-	 * Records a given window
+-	 *
+-	 * @param oStream
+-	 * @param listener
+-	 */
+-	public WindowScreenRecorder(OutputStream oStream,
+-			ScreenRecorderListener listener, WindowInfo window) {
++	
++	public WindowScreenRecorder(OutputStream oStream,ScreenRecorderListener listener, WindowInfo window) {
+ 		super(oStream, listener);
+ 		this.window = window;
+ 	}
+@@ -46,8 +30,26 @@ public class WindowScreenRecorder extends ScreenRecorder{
+ 		Point bottomright = new Point(this.window.getRect()[2], this.window.getRect()[3]);
+ 		return new Rectangle(topleft.x, topleft.y, bottomright.x - topleft.x, bottomright.y - topleft.y);
+ 	}
++	
++	public void updateWindow(WindowInfo window) {
++		this.window = window;
++	}
++	
++	public Rectangle updateRecordingArea() {
++		Point topleft = new Point(this.window.getRect()[0], this.window.getRect()[1]);
++		Point bottomright = new Point(this.window.getRect()[2], this.window.getRect()[3]);
++		try{
++			this.robot = new Robot();
++		}
++		catch(AWTException awe)
++		{
++			awe.printStackTrace();
++			return null;
++		}
++		Rectangle windowRect = getWindowRect();
++		return windowRect;
++	}
+ 
+-	@Override
+ 	public Rectangle initialiseScreenCapture() {
+ 		Point topleft = new Point(this.window.getRect()[0], this.window.getRect()[1]);
+ 		Point bottomright = new Point(this.window.getRect()[2], this.window.getRect()[3]);
+@@ -65,7 +67,6 @@ public class WindowScreenRecorder extends ScreenRecorder{
+ 		return windowRect;
+ 	}
+ 
+-	@Override
+ 	public BufferedImage captureScreen(Rectangle recordArea) {
+ 		Point mousePosition = MouseInfo.getPointerInfo().getLocation();
+ 		BufferedImage image = this.robot.createScreenCapture(recordArea);
+-- 
+2.39.5 (Apple Git-154)
+

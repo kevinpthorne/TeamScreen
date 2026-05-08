@@ -1,0 +1,129 @@
+From 4ad34897954495b1b53f115ff93d0fd791089ec4 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 21 May 2014 08:16:56 -0600
+Subject: [PATCH 047/101] Started tagging by handle, not title
+
+---
+ .../TeamScreen/Frames/WindowSelect.java        |  6 +++---
+ .../aptitekk/TeamScreen/JNA/WindowManager.java |  2 +-
+ .../aptitekk/TeamScreen/JNA/WindowsNative.java | 18 ++++--------------
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java  | 10 ++++++++++
+ 4 files changed, 18 insertions(+), 18 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
+index 43d507c..3cb808f 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
+@@ -63,13 +63,13 @@ public class WindowSelect extends JFrame implements MouseListener, KeyListener{
+ 		Point where = e.getLocationOnScreen();
+ 		int x = where.x;
+ 		int y = where.y;
+-		for(WindowInfo w : WindowUtil.getWindows()) {
++		for(WindowInfo w : master.getWindowManager().getWindows()) {
+ 			System.out.println(w.toString());
+ 			//check if point intersects with any window, and remove other crap
+ 			if(!w.getTitle().equals("")) {
+ 				//if(WindowUtil.getTopWindow().equals(w)) {
+-					if(WindowUtil.getWindowRect(w.getTitle())[0] <= x && WindowUtil.getWindowRect(w.getTitle())[2] >= x) {
+-						if(WindowUtil.getWindowRect(w.getTitle())[1] <= y && WindowUtil.getWindowRect(w.getTitle())[3] >= y) {
++					if(w.getRect()[0] <= x && w.getRect()[2] >= x) {
++						if(w.getRect()[1] <= y && w.getRect()[3] >= y) {
+ 							TeamScreenDaemon.openPushSelect(w);
+ 							System.out.println(w.getTitle());
+ 							break;
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManager.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManager.java
+index 72af655..255f7a8 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManager.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowManager.java
+@@ -9,7 +9,7 @@ public abstract class WindowManager {
+ 	public abstract List<WindowInfo> getWindows();
+ 	public abstract WindowInfo getTopWindow();
+ 	
+-	public abstract int[] getWindowRect(String windowName);
++	public abstract int[] getWindowRect(int hwnd);
+ 	public abstract WindowInfo getWindowbyTitle(String windowTitle) throws WindowNotFoundException;
+ 	
+ 	public abstract WindowInfo updateWindow(WindowInfo w) throws WindowNotFoundException;
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java
+index bf57d5c..8a626a1 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/WindowsNative.java
+@@ -86,30 +86,20 @@ public class WindowsNative extends WindowManager {
+ 		throw new WindowNotFoundException("", windowTitle);
+ 	}
+ 
+-	private int[] getRect(String windowName) throws WindowNotFoundException,
++	private int[] getRect(int hwnd) throws WindowNotFoundException,
+ 	GetWindowRectException {
+-		int hwnd = -1;
+-		List<WindowInfo> windows = getWindows();
+-		for(WindowInfo window : windows) {
+-			if(window.getTitle().equals(windowName)) {
+-				hwnd = window.hwnd;
+-			}
+-		}
+-		if(hwnd == -1) {
+-			throw new WindowNotFoundException("", windowName);
+-		}
+ 		RECT r = new RECT();
+ 		int result = User32.instance.GetWindowRect(hwnd, r);
+ 		if(result == 0) {
+-			throw new GetWindowRectException(windowName);
++			throw new GetWindowRectException("" + hwnd);
+ 		}
+ 		return r.asArray();
+ 	}
+ 
+-	public int[] getWindowRect(String windowName) {
++	public int[] getWindowRect(int hwnd) {
+ 		int[] rect;
+ 		try {
+-			rect = getRect(windowName);
++			rect = getRect(hwnd);
+ 			return rect;
+ 		} catch (WindowNotFoundException e) {
+ 			e.printStackTrace();
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index 4111d0a..1c58854 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -26,6 +26,8 @@ import javax.swing.SwingUtilities;
+ import com.aptitekk.TeamScreen.Frames.MainFrame;
+ import com.aptitekk.TeamScreen.Frames.PushSelect;
+ import com.aptitekk.TeamScreen.Frames.WindowSelect;
++import com.aptitekk.TeamScreen.JNA.WindowManager;
++import com.aptitekk.TeamScreen.JNA.WindowsNative;
+ import com.aptitekk.TeamScreen.Net.NetHandler;
+ import com.aptitekk.TeamScreen.Util.LogFormat;
+ import com.aptitekk.TeamScreen.Util.WindowInfo;
+@@ -59,6 +61,8 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 	public static PushSelect pSelect;
+ 	public static WindowInfo windowPushed;
+ 	
++	WindowManager wManager;
++	
+ 	/**
+ 	 * Start up here
+ 	 *
+@@ -101,6 +105,8 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 			JIntellitype.getInstance().registerHotKey(1, JIntellitype.MOD_CONTROL + JIntellitype.MOD_SHIFT, (int)'1');
+ 			JIntellitype.getInstance().addHotKeyListener(this);
+ 			
++			wManager = new WindowsNative();
++			
+ 	        createTray();
+ 			addTray();
+ 			
+@@ -308,5 +314,9 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+             }
+         });
+ 	}
++	
++	public WindowManager getWindowManager() {
++		return wManager;
++	}
+ 
+ }
+-- 
+2.39.5 (Apple Git-154)
+

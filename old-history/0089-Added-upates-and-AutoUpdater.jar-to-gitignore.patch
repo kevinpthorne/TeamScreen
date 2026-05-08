@@ -1,0 +1,25 @@
+From 36e27cce2947e25b1235a0f38bce19e76a7b0870 Mon Sep 17 00:00:00 2001
+From: Mitch Talmadge <mitcht@aptitekk.com>
+Date: Wed, 30 Jul 2014 20:00:34 -0600
+Subject: [PATCH 089/101] Added /upates and AutoUpdater.jar to gitignore
+
+---
+ TeamScreen/.gitignore | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/TeamScreen/.gitignore b/TeamScreen/.gitignore
+index dc2ab8f..5c45529 100644
+--- a/TeamScreen/.gitignore
++++ b/TeamScreen/.gitignore
+@@ -1,3 +1,5 @@
+ /bin
+ TeamScreen.properties
+-updates.properties
+\ No newline at end of file
++updates.properties
++AutoUpdater.jar
++/updates
+\ No newline at end of file
+-- 
+2.39.5 (Apple Git-154)
+

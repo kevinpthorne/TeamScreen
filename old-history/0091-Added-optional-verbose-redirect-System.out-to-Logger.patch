@@ -1,0 +1,193 @@
+From 3eeaae2560ef802ae96d13897b387347fe20c3e1 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 3 Aug 2014 21:30:22 -0600
+Subject: [PATCH 091/101] Added optional verbose (redirect System.out to
+ Logger), fixed bug in settings frames
+
+---
+ .../Frames/Settings/ConfigureNeighbor.java    |  1 +
+ .../TeamScreen/Frames/SettingsFrame.java      | 14 +++----
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java | 32 +++++++++++++--
+ .../aptitekk/TeamScreen/Util/Interceptor.java | 39 +++++++++++++++++++
+ 4 files changed, 76 insertions(+), 10 deletions(-)
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/Util/Interceptor.java
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/Settings/ConfigureNeighbor.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/Settings/ConfigureNeighbor.java
+index 2c0daed..00dcb38 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/Settings/ConfigureNeighbor.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/Settings/ConfigureNeighbor.java
+@@ -116,6 +116,7 @@ public class ConfigureNeighbor extends JFrame implements ListSelectionListener,
+ 		});
+ 		
+ 		initGui();
++		this.pack();
+ 	}
+ 	
+ 	public void refreshAliveHosts() {
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
+index e6ecf21..66d9afe 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
+@@ -55,8 +55,8 @@ public class SettingsFrame extends JFrame implements ActionListener {
+ 	
+ 	ConfigureNeighbor subframe;
+ 	
+-	final static String NEIGHBORPANEL = "nP";
+-	final static String LOCALPANEL = "lP";
++	final static String NEIGHBOR_PANEL = "nP";
++	final static String LOCAL_PANEL = "lP";
+ 	boolean localPanelShowing = false;
+ 	
+ 	public SettingsFrame(TeamScreenDaemon master) {
+@@ -112,9 +112,9 @@ public class SettingsFrame extends JFrame implements ActionListener {
+ 		this.localSettingsPane.add(this.bottomRow);
+ 		this.localSettingsPane.add(new JLabel("A restart may be neccessary to apply new settings."));
+ 		
+-		this.cardPanel.add(this.neighborPanel, NEIGHBORPANEL);
+-		this.cardPanel.add(this.localSettingsPane, LOCALPANEL);
+-		((CardLayout) this.cardPanel.getLayout()).show(this.cardPanel, NEIGHBORPANEL);
++		this.cardPanel.add(this.neighborPanel, NEIGHBOR_PANEL);
++		this.cardPanel.add(this.localSettingsPane, LOCAL_PANEL);
++		((CardLayout) this.cardPanel.getLayout()).show(this.cardPanel, NEIGHBOR_PANEL);
+ 		
+ 		this.mainPane.add(this.cardPanel);
+ 		
+@@ -213,12 +213,12 @@ public class SettingsFrame extends JFrame implements ActionListener {
+ 			
+ 		} else if(e.getSource().equals(this.more)) {
+ 			if(!localPanelShowing) {
+-				((CardLayout) this.cardPanel.getLayout()).show(this.cardPanel, LOCALPANEL);
++				((CardLayout) this.cardPanel.getLayout()).show(this.cardPanel, LOCAL_PANEL);
+ 				localPanelShowing = true;
+ 				this.more.setText("< Back");
+ 				this.configure.setEnabled(false);
+ 			} else {
+-				((CardLayout) this.cardPanel.getLayout()).show(this.cardPanel, NEIGHBORPANEL);
++				((CardLayout) this.cardPanel.getLayout()).show(this.cardPanel, NEIGHBOR_PANEL);
+ 				localPanelShowing = false;
+ 				this.more.setText("More >");
+ 				this.configure.setEnabled(true);
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index 135c80f..3398c6c 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -45,6 +45,7 @@ import com.aptitekk.TeamScreen.JNA.WindowManager;
+ import com.aptitekk.TeamScreen.JNA.WindowsNative;
+ import com.aptitekk.TeamScreen.JNA.X11Native;
+ import com.aptitekk.TeamScreen.Net.NetHandler;
++import com.aptitekk.TeamScreen.Util.Interceptor;
+ import com.aptitekk.TeamScreen.Util.LogFormat;
+ import com.aptitekk.TeamScreen.Util.NotImplementedException;
+ import com.aptitekk.TeamScreen.Util.WindowInfo;
+@@ -80,6 +81,8 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 	public static WindowInfo windowPushed;
+ 
+ 	static WindowManager wManager;
++	
++	static boolean verbose = false;
+ 
+ 	/**
+ 	 * Start up here
+@@ -95,6 +98,14 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 		UIManager.put("ProgressBar.border", new EmptyBorder(5, 0, 5, 0));
+ 		UIManager
+ 		.put("ProgressBar.font", new Font("SansSerif", Font.PLAIN, 12));
++		
++		if(args.length >= 2) {
++			for(int i=0; i > args.length; i++) {
++				if(args[i].equals("-v") || args[i].equals("--verbose")) {
++					verbose = true;
++				}
++			}
++		}
+ 
+ 		new TeamScreenDaemon();
+ 	}
+@@ -113,6 +124,12 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 			ConsoleHandler consoleHandler = new ConsoleHandler();
+ 			consoleHandler.setFormatter(formatter);
+ 			logger.addHandler(consoleHandler);
++			if(verbose) {
++				Interceptor inter = new Interceptor(System.out, logger, Interceptor.OUT);
++				Interceptor interr = new Interceptor(System.err, logger, Interceptor.ERR);
++				System.setErr(interr);
++				System.setOut(inter);
++			}
+ 			if(Boolean.valueOf(properties.getConfig().getProperty("Log"))) {
+ 				FileHandler fh;
+ 				try {
+@@ -493,14 +510,23 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 	{
+ 		logger.info("Restart was called!");
+ 		try {
++			final File currentFileLocation = new File(TeamScreenDaemon.class.getProtectionDomain().getCodeSource().getLocation().toURI());
++			if(!currentFileLocation.getName().endsWith(".exe")) {
++				; //continue
++			} else {
++				final ProcessBuilder builder = new ProcessBuilder("start", "/d", currentFileLocation.getPath());
++				builder.start();
++				this.exit();
++			}
++			
++			
+ 			final String javaBin = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
+-			final File currentJar = new File(TeamScreenDaemon.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+ 			/* is it a jar file? */
+-			if(!currentJar.getName().endsWith(".jar")) {
++			if(!currentFileLocation.getName().endsWith(".jar")) {
+ 				System.err.println("Jar was not found");
+ 				this.exit();
+ 			}
+-			final ProcessBuilder builder = new ProcessBuilder(javaBin, "-jar", currentJar.getPath());
++			final ProcessBuilder builder = new ProcessBuilder(javaBin, "-jar", currentFileLocation.getPath());
+ 			builder.start();
+ 			this.exit();
+ 		} catch (URISyntaxException | IOException e) {
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Util/Interceptor.java b/TeamScreen/src/com/aptitekk/TeamScreen/Util/Interceptor.java
+new file mode 100644
+index 0000000..fa67bf0
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Util/Interceptor.java
+@@ -0,0 +1,39 @@
++package com.aptitekk.TeamScreen.Util;
++
++import java.io.OutputStream;
++import java.io.PrintStream;
++import java.util.logging.Logger;
++
++/**
++ * @author kevint
++ *
++ */
++public class Interceptor extends PrintStream{
++	
++	public static final int ERR = 1;
++	public static final int OUT = 2;
++	private Logger logger;
++	private int type;
++	
++	/**
++	 * Intercepts System.out and System.err to the logger
++	 * 
++	 * @param OutputStream out
++	 * @param Logger logger
++	 * @param int type
++	 */
++	public Interceptor(OutputStream out, Logger logger, int type) {
++		super(out, true);
++		this.logger = logger;
++		this.type = type;
++	}
++	
++	public void print(String s) {
++		if(type == ERR) {
++			logger.severe("INTERCEPTED - " + s);
++		} else {
++			logger.fine("INTERCEPTED - " + s);
++		}
++	}
++
++}
+-- 
+2.39.5 (Apple Git-154)
+

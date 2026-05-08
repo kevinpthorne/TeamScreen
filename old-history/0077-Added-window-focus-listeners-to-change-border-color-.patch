@@ -1,0 +1,102 @@
+From 16f1ef285eb55d930bc020134ea62a1fff144125 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 30 Jul 2014 10:00:01 -0600
+Subject: [PATCH 077/101] Added window focus listeners to change border color
+ on focus loss/regain on updater dialogs
+
+---
+ .../AutoUpdater/ChangeLogDialog.java          | 19 +++++++++++++++++++
+ .../AutoUpdater/DownloadDialog.java           | 19 +++++++++++++++++++
+ 2 files changed, 38 insertions(+)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/ChangeLogDialog.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/ChangeLogDialog.java
+index 8534827..6c6c86b 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/ChangeLogDialog.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/ChangeLogDialog.java
+@@ -10,6 +10,7 @@ import java.awt.event.MouseListener;
+ import java.awt.event.MouseMotionListener;
+ import java.awt.event.WindowAdapter;
+ import java.awt.event.WindowEvent;
++import java.awt.event.WindowFocusListener;
+ import java.awt.image.BufferedImage;
+ import java.awt.image.CropImageFilter;
+ import java.awt.image.FilteredImageSource;
+@@ -17,6 +18,7 @@ import java.io.IOException;
+ import java.net.URL;
+ 
+ import javax.imageio.ImageIO;
++import javax.swing.BorderFactory;
+ import javax.swing.BoxLayout;
+ import javax.swing.ImageIcon;
+ import javax.swing.JFrame;
+@@ -90,6 +92,23 @@ public class ChangeLogDialog extends JFrame implements MouseListener
+ 		dispose();
+ 	    }
+ 	});
++	this.addWindowFocusListener(new WindowFocusListener() {
++
++		@Override
++		public void windowGainedFocus(WindowEvent e) {
++			((JPanel) getContentPane()).setBorder(BorderFactory.createCompoundBorder(
++					BorderFactory.createMatteBorder(5, 5, 5, 5, new Color(0, 120, 255)),
++					new EmptyBorder(10, 10, 10, 10)));
++		}
++
++		@Override
++		public void windowLostFocus(WindowEvent e) {
++			((JPanel) getContentPane()).setBorder(BorderFactory.createCompoundBorder(
++					BorderFactory.createMatteBorder(5, 5, 5, 5, new Color(138, 138, 138)),
++					new EmptyBorder(10, 10, 10, 10)));
++		}
++		
++	});
+ 	
+ 	mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
+ 	
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DownloadDialog.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DownloadDialog.java
+index 67da009..51f2365 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DownloadDialog.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/DownloadDialog.java
+@@ -9,6 +9,7 @@ import java.awt.event.MouseListener;
+ import java.awt.event.MouseMotionListener;
+ import java.awt.event.WindowAdapter;
+ import java.awt.event.WindowEvent;
++import java.awt.event.WindowFocusListener;
+ import java.awt.image.BufferedImage;
+ import java.awt.image.CropImageFilter;
+ import java.awt.image.FilteredImageSource;
+@@ -17,6 +18,7 @@ import java.net.URL;
+ import java.util.ArrayList;
+ 
+ import javax.imageio.ImageIO;
++import javax.swing.BorderFactory;
+ import javax.swing.BoxLayout;
+ import javax.swing.ImageIcon;
+ import javax.swing.JFrame;
+@@ -97,6 +99,23 @@ public class DownloadDialog extends JFrame implements DLProgressListener, MouseL
+ 		AutoUpdater.notifyObject();
+ 	    }
+ 	});
++	this.addWindowFocusListener(new WindowFocusListener() {
++
++		@Override
++		public void windowGainedFocus(WindowEvent e) {
++			((JPanel) getContentPane()).setBorder(BorderFactory.createCompoundBorder(
++					BorderFactory.createMatteBorder(5, 5, 5, 5, new Color(0, 120, 255)),
++					new EmptyBorder(10, 10, 10, 10)));
++		}
++
++		@Override
++		public void windowLostFocus(WindowEvent e) {
++			((JPanel) getContentPane()).setBorder(BorderFactory.createCompoundBorder(
++					BorderFactory.createMatteBorder(5, 5, 5, 5, new Color(138, 138, 138)),
++					new EmptyBorder(10, 10, 10, 10)));
++		}
++		
++	});
+ 	
+ 	mainPanel.setLayout(new BoxLayout(mainPanel, BoxLayout.Y_AXIS));
+ 	
+-- 
+2.39.5 (Apple Git-154)
+

@@ -1,0 +1,25 @@
+From 85cb138fc28ffcccc4981dc4c6451a5f9ff1ea80 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 21 May 2014 08:40:52 -0600
+Subject: [PATCH 050/101] Playing with resizable windows again
+
+---
+ .../aptitekk/TeamScreen/Net/jrc/Client/ClientWindowFrame.java   | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/ClientWindowFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/ClientWindowFrame.java
+index 4797d9c..df01086 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/ClientWindowFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/ClientWindowFrame.java
+@@ -52,7 +52,7 @@ public class ClientWindowFrame extends JFrame implements RemoteControlClient {
+ 		this.setSize(this.picLabel.getSize().width, this.picLabel.getSize().height+60);
+ 		this.setVisible(true);
+ 		this.pack();
+-		this.setResizable(true);
++		this.setResizable(false);
+ 	}
+ 	
+ 	@Override
+-- 
+2.39.5 (Apple Git-154)
+

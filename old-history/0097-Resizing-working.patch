@@ -1,0 +1,617 @@
+From dacc1e72348cdf2201e5bf646542dfd995bc785b Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Thu, 5 Nov 2015 21:05:41 -0700
+Subject: [PATCH 097/101] Resizing working
+
+---
+ .../Net/jrc/Client/ClientWindowFrame.java     | 190 +++++++++---------
+ .../jrc/Client/DynamicFrameDecompressor.java  |  42 ++--
+ .../Net/jrc/Client/DynamicScreenPlayer.java   | 189 ++++++++---------
+ .../Server/DynamicWindowScreenRecorder.java   |   8 +
+ 4 files changed, 230 insertions(+), 199 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/ClientWindowFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/ClientWindowFrame.java
+index df01086..7a0b20c 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/ClientWindowFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/ClientWindowFrame.java
+@@ -1,94 +1,96 @@
+-package com.aptitekk.TeamScreen.Net.jrc.Client;
+-
+-import java.awt.Component;
+-import java.awt.Dimension;
+-import java.awt.Image;
+-import java.awt.event.WindowAdapter;
+-import java.awt.event.WindowEvent;
+-
+-import javax.swing.BoxLayout;
+-import javax.swing.ImageIcon;
+-import javax.swing.JFrame;
+-import javax.swing.JLabel;
+-
+-import org.one.stone.soup.grfx.ImageFactory;
+-import org.one.stone.soup.remote.control.client.RemoteControlClient;
+-
+-import com.aptitekk.TeamScreen.Net.jrc.ClientApplication;
+-
+-/**
+- * Shows the window pushed onto the computer
+- *
+- * @author kevint.
+- *         Created Apr 6, 2014.
+- */
+-public class ClientWindowFrame extends JFrame implements RemoteControlClient {
+-	
+-	private ClientApplication controller;
+-	private ImageIcon viewIcon;
+-	public JLabel picLabel;
+-	private boolean firstFrame = true;
+-	
+-	public ClientWindowFrame(final ClientApplication controller, String title) {
+-		this.controller = controller;
+-		
+-		addWindowListener(new WindowAdapter() {
+-			@Override
+-			public void windowClosing(WindowEvent e) {
+-				controller.disconnect();
+-			}
+-		});
+-		
+-		this.setTitle(title + " - TeamScreen");
+-		//this.setUndecorated(true);
+-		this.setLayout(new BoxLayout(getContentPane(), BoxLayout.PAGE_AXIS));
+-		this.setIconImage(ImageFactory.loadImage("jar://images/TeamScreen-64px.png"));
+-		
+-		this.viewIcon = new ImageIcon( ImageFactory.loadImage("jar://images/TeamScreen-64px.png") );
+-		
+-		this.picLabel = new JLabel(this.viewIcon);
+-		add(this.picLabel);
+-		
+-		this.setSize(this.picLabel.getSize().width, this.picLabel.getSize().height+60);
+-		this.setVisible(true);
+-		this.pack();
+-		this.setResizable(false);
+-	}
+-	
+-	@Override
+-	public void showNewImage(Image image) {
+-		if(image==null)
+-		{
+-			return;
+-		}
+-		
+-		this.viewIcon.setImage(image);
+-		this.picLabel.setIcon(this.viewIcon);
+-		
+-		if(this.firstFrame && image.getWidth(this)!=-1 && image.getHeight(this)!=-1)
+-		{
+-			this.controller.doLayout();
+-			this.firstFrame=false;
+-		}
+-		this.setSize(new Dimension(this.viewIcon.getIconWidth(), this.viewIcon.getIconHeight()));
+-		this.picLabel.repaint();
+-		this.repaint(0);
+-	}
+-	@Override
+-	public void playerStopped() {
+-		this.dispose();
+-	}
+-	@Override
+-	public void newFrame() {
+-		this.controller.requestNextFrame();
+-	}
+-	@Override
+-	public void setFullscreen(boolean state) {
+-		;
+-	}
+-	@Override
+-	public Component getView() {
+-		return this;
+-	}
+-
+-}
++package com.aptitekk.TeamScreen.Net.jrc.Client;
++
++import java.awt.Component;
++import java.awt.Dimension;
++import java.awt.Image;
++import java.awt.event.WindowAdapter;
++import java.awt.event.WindowEvent;
++
++import javax.swing.BoxLayout;
++import javax.swing.ImageIcon;
++import javax.swing.JFrame;
++import javax.swing.JLabel;
++
++import org.one.stone.soup.grfx.ImageFactory;
++import org.one.stone.soup.remote.control.client.RemoteControlClient;
++
++import com.aptitekk.TeamScreen.Net.jrc.ClientApplication;
++
++/**
++ * Shows the window pushed onto the computer
++ *
++ * @author kevint.
++ *         Created Apr 6, 2014.
++ */
++public class ClientWindowFrame extends JFrame implements RemoteControlClient {
++	
++	private ClientApplication controller;
++	private ImageIcon viewIcon;
++	public JLabel picLabel;
++	private boolean firstFrame = true;
++	
++	public ClientWindowFrame(final ClientApplication controller, String title) {
++		this.controller = controller;
++		
++		addWindowListener(new WindowAdapter() {
++			@Override
++			public void windowClosing(WindowEvent e) {
++				controller.disconnect();
++			}
++		});
++		
++		this.setTitle(title + " - TeamScreen");
++		//this.setUndecorated(true);
++		this.setLayout(new BoxLayout(getContentPane(), BoxLayout.PAGE_AXIS));
++		this.setIconImage(ImageFactory.loadImage("jar://images/TeamScreen-64px.png"));
++		
++		this.viewIcon = new ImageIcon( ImageFactory.loadImage("jar://images/TeamScreen-64px.png") );
++		
++		this.picLabel = new JLabel(this.viewIcon);
++		add(this.picLabel);
++		
++		this.setSize(this.picLabel.getSize().width, this.picLabel.getSize().height+60);
++		this.setVisible(true);
++		this.pack();
++		this.setResizable(true);
++	}
++	
++	@Override
++	public void showNewImage(Image image) {
++		if(image==null)
++		{
++			System.out.println("Image is null!");
++			return;
++		}
++		
++		this.viewIcon.setImage(image);
++		this.picLabel.setIcon(this.viewIcon);
++		
++		if(this.firstFrame && image.getWidth(this)!=-1 && image.getHeight(this)!=-1)
++		{
++			this.controller.doLayout();
++			this.firstFrame=false;
++		}
++		
++		this.setSize(new Dimension(image.getWidth(this)+15, image.getHeight(this)+40));
++		this.picLabel.repaint();
++		this.repaint(0);
++	}
++	@Override
++	public void playerStopped() {
++		this.dispose();
++	}
++	@Override
++	public void newFrame() {
++		this.controller.requestNextFrame();
++	}
++	@Override
++	public void setFullscreen(boolean state) {
++		;
++	}
++	@Override
++	public Component getView() {
++		return this;
++	}
++
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/DynamicFrameDecompressor.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/DynamicFrameDecompressor.java
+index 6785a87..6a028d6 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/DynamicFrameDecompressor.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/DynamicFrameDecompressor.java
+@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream;
+ import java.io.ByteArrayOutputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
++import java.util.Date;
+ import java.util.zip.GZIPInputStream;
+ 
+ import com.aptitekk.TeamScreen.TeamScreenDaemon;
+@@ -12,10 +13,9 @@ public class DynamicFrameDecompressor {
+ 	private static final int ALPHA = 0xFF000000;
+ 
+ 	public class FramePacket {
+-		private FramePacket(InputStream iStream, int expectedSize) {
+-			this.frameSize = expectedSize;
++		private FramePacket(InputStream iStream, int previousSize) {
+ 			this.iStream = iStream;
+-			previousData = new int[frameSize];
++			this.previousData = new int[previousSize];
+ 		}
+ 
+ 		private void nextFrame() {
+@@ -30,7 +30,6 @@ public class DynamicFrameDecompressor {
+ 		private int resultedSize;
+ 		private long frameTimeStamp;
+ 		private byte[] packed;
+-		private int frameSize;
+ 		private int[] newData;
+ 		private int[] frameDim = new int[2];
+ 
+@@ -45,6 +44,7 @@ public class DynamicFrameDecompressor {
+ 		public long getTimeStamp() {
+ 			return frameTimeStamp;
+ 		}
++
+ 		public int[] getFrameDim() {
+ 			return frameDim;
+ 		}
+@@ -57,7 +57,7 @@ public class DynamicFrameDecompressor {
+ 	}
+ 
+ 	/**
+-	 * Pulls from the stream and then calls 
++	 * Pulls from the stream and then calls
+ 	 * 
+ 	 * @return
+ 	 * @throws IOException
+@@ -79,10 +79,10 @@ public class DynamicFrameDecompressor {
+ 		time += i;
+ 
+ 		frame.frameTimeStamp = (long) time;
+-		// System.out.println("ft:"+frameTime);
++		//System.out.println("ft:"+time);
+ 
+ 		byte type = (byte) frame.iStream.read();
+-		// System.out.println("Packed Code:"+type);
++		//System.out.println("Packed Code:"+type);
+ 
+ 		if (type <= 0) {
+ 			// frame.newData = frame.previousData;
+@@ -92,8 +92,8 @@ public class DynamicFrameDecompressor {
+ 		/*
+ 		 * } catch(Exception e) { e.printStackTrace(); }
+ 		 */
+-		
+-		//GET SIZE
++
++		// GET SIZE
+ 		int width = frame.iStream.read();
+ 		width = width << 8;
+ 		width += frame.iStream.read();
+@@ -102,6 +102,7 @@ public class DynamicFrameDecompressor {
+ 		height = height << 8;
+ 		height += frame.iStream.read();
+ 		frame.getFrameDim()[1] = height;
++		//System.out.println("Frame size: " + width + "x" + height);
+ 
+ 		ByteArrayOutputStream bO = new ByteArrayOutputStream();
+ 		try {
+@@ -117,9 +118,9 @@ public class DynamicFrameDecompressor {
+ 			i = frame.iStream.read();
+ 			zSize += i;
+ 
+-			if(TeamScreenDaemon.getVerbose())
++			if (TeamScreenDaemon.getVerbose())
+ 				System.out.println("Zipped Frame size: " + zSize);
+-			
++
+ 			byte[] zData = new byte[zSize];
+ 			int readCursor = 0;
+ 			int sizeRead = 0;
+@@ -171,7 +172,7 @@ public class DynamicFrameDecompressor {
+ 	 * 
+ 	 */
+ 	private void runLengthDecode() {
+-		frame.newData = new int[frame.frameSize];
++		frame.newData = new int[frame.frameDim[0] * frame.frameDim[1]];
+ 
+ 		int inCursor = 0;
+ 		int outCursor = 0;
+@@ -183,9 +184,20 @@ public class DynamicFrameDecompressor {
+ 		int green = 0xFF00FF00;
+ 		int blue = 0xFF0000FF;
+ 
+-		// System.out.println("Combineing old:"+frame.previousData+" with new:"+frame.newData);
+-
+-		while (inCursor < frame.packed.length && outCursor < frame.frameSize) {
++		//System.out.println("Combining old:" + frame.previousData + " with new:"
++		//		+ frame.newData);
++
++		while (inCursor < frame.packed.length && outCursor < (frame.frameDim[0] * frame.frameDim[1])) {
++			if (outCursor > frame.previousData.length) {
++				//fill with black
++				frame.newData[outCursor] = ((0 & 0xFF) << 16)
++											| ((0 & 0xFF) << 8)
++											| (0 & 0xFF);
++				outCursor++;
++				if (outCursor == frame.newData.length) {
++					break;
++				}
++			}
+ 			if (frame.packed[inCursor] == -1) {
+ 				inCursor++;
+ 
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/DynamicScreenPlayer.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/DynamicScreenPlayer.java
+index 1ba8075..b081c82 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/DynamicScreenPlayer.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Client/DynamicScreenPlayer.java
+@@ -12,11 +12,12 @@ import java.awt.image.ColorModel;
+ import java.awt.image.MemoryImageSource;
+ import java.io.IOException;
+ import java.io.InputStream;
++import java.util.Date;
+ 
+ import org.one.stone.soup.screen.recorder.FrameDecompressor;
+ import org.one.stone.soup.screen.recorder.ScreenPlayerListener;
+ 
+-public class DynamicScreenPlayer implements Runnable{
++public class DynamicScreenPlayer implements Runnable {
+ 
+ 	private ScreenPlayerListener listener;
+ 
+@@ -24,145 +25,153 @@ public class DynamicScreenPlayer implements Runnable{
+ 	private Rectangle area;
+ 
+ 	private DynamicFrameDecompressor decompressor;
+-	
++
+ 	private long startTime;
+ 	private long frameTime;
+-	
++
+ 	private boolean running;
+ 	private boolean paused;
+ 	private boolean fastForward;
+ 	private boolean realtime = false;
+ 
+-	public DynamicScreenPlayer(InputStream iStream,ScreenPlayerListener listener)
+-	{
++	public DynamicScreenPlayer(InputStream iStream,
++			ScreenPlayerListener listener) {
+ 		this.listener = listener;
+-		
+-		try{
++
++		try {
+ 			int width = iStream.read();
+ 			width = width << 8;
+ 			width += iStream.read();
+-			
++
+ 			int height = iStream.read();
+ 			height = height << 8;
+ 			height += iStream.read();
+-			
+-			area = new Rectangle(width,height);
+-			
+-			decompressor = new DynamicFrameDecompressor(iStream,width*height);
+-		}
+-		catch(Exception e)
+-		{
++
++			area = new Rectangle(width, height);
++
++			decompressor = new DynamicFrameDecompressor(iStream, width * height);
++		} catch (Exception e) {
+ 			e.printStackTrace();
+ 		}
+ 	}
+-	
+-	public void play()
+-	{
+-		fastForward=false;
+-		paused=false;
+-		
+-		if(running==false)
+-		{
+-			new Thread(this,"Screen Player").start();
++
++	public void play() {
++		fastForward = false;
++		paused = false;
++
++		if (running == false) {
++			new Thread(this, "Screen Player").start();
+ 		}
+ 	}
+-	
+-	public void pause()
+-	{
+-		if(realtime==false)
+-		{
+-			paused=true;
++
++	public void pause() {
++		if (realtime == false) {
++			paused = true;
+ 		}
+ 	}
+-	
+-	public void stop()
+-	{
+-		paused=false;
+-		running=false;
++
++	public void stop() {
++		paused = false;
++		running = false;
+ 	}
+-	
+-	public void fastforward()
+-	{
+-		fastForward=true;
+-		paused=false;
++
++	public void fastforward() {
++		fastForward = true;
++		paused = false;
+ 	}
+-	
+-	public synchronized void run()
+-	{
++
++	public synchronized void run() {
+ 		startTime = System.currentTimeMillis();
+ 		long lastFrameTime = 0;
+ 		
+-		running=true;
+-		while(running==true)
+-		{
+-			while(paused==true && realtime==false)
+-			{
+-				try{ Thread.sleep(50); }catch(Exception e){}					
++		running = true;
++		while (running == true) {
++			while (paused == true && realtime == false) {
++				System.out.println("Out of sync");
++				try {
++					Thread.sleep(50);
++				} catch (Exception e) {
++				}
+ 				startTime += 50;
+ 			}
+-			
+-			try{
++
++			try {
+ 				readFrame();
+ 				listener.newFrame();
+-			}
+-			catch(IOException ioe)
+-			{
++			} catch (IOException ioe) {
+ 				//ioe.printStackTrace();
+ 				listener.showNewImage(null);
+ 				break;
+ 			}
+-			
+-			if(fastForward==true)
+-			{
+-				startTime -= (frameTime-lastFrameTime);
+-			}
+-			else
+-			{
+-				while( (System.currentTimeMillis()-startTime<frameTime && realtime==false) && running )
+-				{
+-					try{ Thread.sleep(100); }catch(Exception e){}
++
++			if (fastForward == true) {
++				startTime -= (frameTime - lastFrameTime);
++			} else {
++				while ((System.currentTimeMillis() - startTime < frameTime && realtime == false)
++						&& running) {
++					System.out.println("Out of sync");
++					try {
++						Thread.sleep(100);
++					} catch (Exception e) {
++						e.printStackTrace();
++					}
+ 				}
+-				
+-				//System.out.println( "FrameTime:"+frameTime+">"+(System.currentTimeMillis()-startTime));
++
++				// System.out.println(
++				// "FrameTime:"+frameTime+">"+(System.currentTimeMillis()-startTime));
+ 			}
+-			
+-			lastFrameTime=frameTime;
++
++			lastFrameTime = frameTime;
+ 		}
+ 		running = false;
+-		
++
+ 		listener.playerStopped();
++		System.out.println("Screen Player Stopped");
+ 	}
+-	
+-	private void readFrame() throws IOException
+-	{
++
++	private void readFrame() throws IOException {
+ 		DynamicFrameDecompressor.FramePacket frame = decompressor.unpack();
+-		
++
+ 		frameTime = frame.getTimeStamp();
+ 		area = new Rectangle(frame.getFrameDim()[0], frame.getFrameDim()[1]);
+-		
++
+ 		int result = frame.getResultSize();
+-		if( result==0 )
+-		{
++		if (result == 0) {
+ 			return;
+-		}
+-		else if( result==-1 )
+-		{
+-			running=false;
++		} else if (result == -1) {
++			//System.out.println("Yucky frame caught");
++			running = false;
+ 			return;
+ 		}
++
+ 		
+-		if(mis==null)
+-		{
+-			mis = new MemoryImageSource(area.width,area.height,frame.getData(),0,area.width);
++		mis = new MemoryImageSource(area.width, area.height,
++				frame.getData(), 0, area.width);
++		mis.setAnimated(true);
++		listener.showNewImage(Toolkit.getDefaultToolkit().createImage(mis));
++		return;
++		
++		/*if (mis == null) {
++			mis = new MemoryImageSource(area.width, area.height,
++					frame.getData(), 0, area.width);
+ 			mis.setAnimated(true);
+-			listener.showNewImage( Toolkit.getDefaultToolkit().createImage(mis) );
+-			return;
+-		}
+-		else
+-		{
+-			mis.newPixels(frame.getData(),ColorModel.getRGBdefault(),0,area.width);
++			listener.showNewImage(Toolkit.getDefaultToolkit().createImage(mis));
+ 			return;
+-		}		
++		} else {
++			try {
++				mis.newPixels(frame.getData(), ColorModel.getRGBdefault(), 0,
++						area.width);
++				listener.showNewImage(Toolkit.getDefaultToolkit().createImage(mis));
++			} catch (ArrayIndexOutOfBoundsException e) {
++				e.printStackTrace();
++				mis = new MemoryImageSource(area.width, area.height,
++						frame.getData(), 0, area.width);
++				mis.setAnimated(true);
++				listener.showNewImage(Toolkit.getDefaultToolkit().createImage(mis));
++			} finally {
++				return;
++			}
++		}*/
+ 	}
+ 
+ 	public boolean isRealtime() {
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicWindowScreenRecorder.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicWindowScreenRecorder.java
+index 68d29ec..a3f086b 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicWindowScreenRecorder.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/Server/DynamicWindowScreenRecorder.java
+@@ -95,6 +95,14 @@ public class DynamicWindowScreenRecorder implements Runnable {
+ 						}
+ 					} catch (ArrayIndexOutOfBoundsException e) {
+ 						resize();
++						try {
++							compressor.pack(pack.newData, pack.frameTime, pack.width, pack.height, reset);
++							if (reset == true) {
++								reset = false;
++							}
++						} catch (IOException exception) {
++							exception.printStackTrace();
++						}
+ 					} catch (Exception e) {
+ 						e.printStackTrace();
+ 						try {
+-- 
+2.39.5 (Apple Git-154)
+

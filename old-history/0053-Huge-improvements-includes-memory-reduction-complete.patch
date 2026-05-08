@@ -1,0 +1,1180 @@
+From 76a8335ca6b66d770e6167bc78b0869a66a51b1f Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 20 Jul 2014 20:50:51 -0600
+Subject: [PATCH 053/101] Huge improvements; includes memory reduction,
+ complete remake of the main window, added icons
+
+---
+ .../aptitekk/TeamScreen/Frames/MainFrame.java | 268 ++++++++++++------
+ .../TeamScreen/Frames/PushSelect.java         |  19 +-
+ .../TeamScreen/Frames/WindowSelect.java       |   2 +-
+ .../aptitekk/TeamScreen/JNA/X11Native.java    | 140 +++++++++
+ .../TeamScreenBroadcastThread.java            |   1 +
+ .../aptitekk/TeamScreen/Net/NetHandler.java   |   4 +-
+ .../Net/jrc/DynamicJRCServerApplication.java  |   4 +-
+ .../TeamScreen/PropertiesHandler.java         |   1 +
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java |  90 ++++--
+ TeamScreen/src/images/exit.png                | Bin 0 -> 362 bytes
+ TeamScreen/src/images/join-disabled.png       | Bin 0 -> 385 bytes
+ TeamScreen/src/images/join-enabled.png        | Bin 0 -> 414 bytes
+ TeamScreen/src/images/leave-disabled.png      | Bin 0 -> 383 bytes
+ TeamScreen/src/images/leave-enabled.png       | Bin 0 -> 406 bytes
+ TeamScreen/src/images/pin.png                 | Bin 0 -> 262 bytes
+ TeamScreen/src/images/pinned.png              | Bin 0 -> 313 bytes
+ TeamScreen/src/images/settings-hover.png      | Bin 0 -> 1154 bytes
+ TeamScreen/src/images/settings.png            | Bin 0 -> 1333 bytes
+ TeamScreen/src/images/share-disabled.png      | Bin 0 -> 1122 bytes
+ TeamScreen/src/images/share-enabled.png       | Bin 0 -> 1205 bytes
+ TeamScreen/src/images/share1-disabled.png     | Bin 0 -> 886 bytes
+ TeamScreen/src/images/share1-enabled.png      | Bin 0 -> 968 bytes
+ 22 files changed, 415 insertions(+), 114 deletions(-)
+ create mode 100644 TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
+ create mode 100644 TeamScreen/src/images/exit.png
+ create mode 100644 TeamScreen/src/images/join-disabled.png
+ create mode 100644 TeamScreen/src/images/join-enabled.png
+ create mode 100644 TeamScreen/src/images/leave-disabled.png
+ create mode 100644 TeamScreen/src/images/leave-enabled.png
+ create mode 100644 TeamScreen/src/images/pin.png
+ create mode 100644 TeamScreen/src/images/pinned.png
+ create mode 100644 TeamScreen/src/images/settings-hover.png
+ create mode 100644 TeamScreen/src/images/settings.png
+ create mode 100644 TeamScreen/src/images/share-disabled.png
+ create mode 100644 TeamScreen/src/images/share-enabled.png
+ create mode 100644 TeamScreen/src/images/share1-disabled.png
+ create mode 100644 TeamScreen/src/images/share1-enabled.png
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java
+index ff7569f..3648549 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/MainFrame.java
+@@ -1,28 +1,31 @@
+ package com.aptitekk.TeamScreen.Frames;
+ 
+-import java.awt.BorderLayout;
++import java.awt.Color;
++import java.awt.Component;
++import java.awt.ComponentOrientation;
+ import java.awt.Dimension;
+-import java.awt.GridLayout;
++import java.awt.FlowLayout;
++import java.awt.Image;
++import java.awt.Point;
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+-import java.awt.event.ComponentEvent;
+-import java.awt.event.ComponentListener;
+-import java.awt.event.WindowAdapter;
++import java.awt.event.MouseEvent;
++import java.awt.event.MouseListener;
++import java.awt.event.MouseMotionListener;
+ import java.awt.event.WindowEvent;
+-import java.awt.image.ImageObserver;
+ 
+-import javax.swing.JButton;
++import javax.swing.BorderFactory;
++import javax.swing.Box;
++import javax.swing.ImageIcon;
+ import javax.swing.JFrame;
+ import javax.swing.JLabel;
++import javax.swing.JOptionPane;
+ import javax.swing.JPanel;
+-import javax.swing.JScrollPane;
+-import javax.swing.JSplitPane;
+-import javax.swing.JTextArea;
+-import javax.swing.ScrollPaneConstants;
++import javax.swing.SwingUtilities;
++import javax.swing.border.EmptyBorder;
+ 
++import com.aptitekk.TeamScreen.FolderManager;
+ import com.aptitekk.TeamScreen.TeamScreenDaemon;
+-import com.aptitekk.TeamScreen.Util.LogFormat;
+-import com.aptitekk.TeamScreen.Util.SwingHandler;
+ 
+ /**
+  * Main GUI, it'll kinda be like synergy's with simpler, nicer look
+@@ -30,131 +33,230 @@ import com.aptitekk.TeamScreen.Util.SwingHandler;
+  * @author kevint.
+  *         Created Apr 3, 2014.
+  */
+-public class MainFrame extends JFrame implements ActionListener, ComponentListener{
++public class MainFrame extends JFrame implements ActionListener, MouseListener{
+ 	
+ 	TeamScreenDaemon master;
++	static Point mouseDownCompCoords;
+ 	
+-	JLabel status;
+-	JSplitPane middle;
+-	JTextArea logDisplay = new JTextArea();
+-	JButton enableToggle;
++	JPanel mainPane;
++	
++	ImageButton sharePane;
++	ImageButton settingsPane;
++	ImageButton joinPane;
++	ImageButton leavePane;
++	ImageButton pinPane;
++	ImageButton exitPane;
++	
++	boolean pinned = false;
++	
++	class ImageButton{
++		JLabel image;
++		boolean enabled;
++		
++		public ImageButton(ImageIcon image) {
++			this.image = new JLabel(image);
++			this.enabled = true;
++		}
++		public ImageButton(ImageIcon image, boolean enabled) {
++			this.image = new JLabel(image);
++			this.enabled = enabled;
++		}
++		public ImageButton(ImageIcon image, boolean enabled, String toolTip) {
++			this.image = new JLabel(image);
++			this.enabled = enabled;
++			this.image.setToolTipText(toolTip);
++		}
++		public ImageButton(ImageIcon image, String toolTip) {
++			this.image = new JLabel(image);
++			this.enabled = true;
++			this.image.setToolTipText(toolTip);
++		}
++		
++		public boolean getEnabled() {
++			return enabled;
++		}
++		public void setEnabled(boolean enable) {
++			enabled = enable;
++		}
++		public JLabel getIconPane() {
++			return image;
++		}
++	}
+ 	
+ 	public MainFrame(TeamScreenDaemon master) {
+ 		this.master = master;
+ 		
+ 		System.setProperty("com.apple.mrj.application.apple.menu.about.name", "TeamScreen");
+ 		this.setTitle("TeamScreen");
+-		setSize(750, 550);
+-		setMinimumSize(new Dimension(750,550));
+-		setResizable(true);
++		this.setMaximumSize(new Dimension(430, 70));
++		this.setMinimumSize(new Dimension(430, 70));
++		setResizable(false);
+ 		setLocationRelativeTo(null);
+-		/*
+-		InputStream is50 = this.getClass().getResourceAsStream("/images/logo_server_50px.png");
+-		InputStream is64 = this.getClass().getResourceAsStream("/images/logo_server_64px.png");
+-		try {
+-			img_50 = ImageIO.read(is50);
+-			img_64 = ImageIO.read(is64);
+-		} catch (IOException exception) {
+-			exception.printStackTrace();
+-		}
+-		console.setEditable(false);
+-		icon = new ImageIcon(img_50);
+ 
+-		this.setIconImage(img_64);
+-		 */
+-		this.addComponentListener(this);
+-		
+-		SwingHandler sh = new SwingHandler(this.logDisplay);
+-		sh.setFormatter(new LogFormat());
+-		master.logger.addHandler(sh);
++		this.setIconImage(FolderManager.createImage("/images/TeamScreen-64px.png", "tray icon"));
+ 		
++		this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Already there
++	    
++	    mouseDownCompCoords = null;
++        this.setUndecorated(true);
++        this.setVisible(true);
++        this.setBounds(0, 0, 430, 70);
++        this.setAlwaysOnTop(pinned);
++
++        this.addMouseListener(new MouseListener(){
++            public void mouseReleased(MouseEvent e) {
++                mouseDownCompCoords = null;
++            }
++            public void mousePressed(MouseEvent e) {
++                mouseDownCompCoords = e.getPoint();
++            }
++            public void mouseExited(MouseEvent e) {
++            }
++            public void mouseEntered(MouseEvent e) {
++            }
++            public void mouseClicked(MouseEvent e) {
++            }
++        });
++
++        this.addMouseMotionListener(new MouseMotionListener(){
++            public void mouseMoved(MouseEvent e) {
++            }
++
++            public void mouseDragged(MouseEvent e) {
++                Point currCoords = e.getLocationOnScreen();
++                setLocation(currCoords.x - mouseDownCompCoords.x, currCoords.y - mouseDownCompCoords.y);
++            }
++        });
++	    
+ 		initGui();
+ 		
++		this.getContentPane().setBackground(Color.WHITE);
++		((JPanel) this.getContentPane()).setBorder(BorderFactory.createCompoundBorder(
++				BorderFactory.createMatteBorder(5, 5, 5, 5, new Color(0, 120, 255)),
++				new EmptyBorder(10, 10, 10, 10)));
++		
+ 		this.pack();
+ 	}
+ 	
+ 	private void initGui() {
+-		JPanel mainPane = new JPanel(new BorderLayout());
++		mainPane = new JPanel(new FlowLayout());
++		mainPane.setComponentOrientation(ComponentOrientation.LEFT_TO_RIGHT);
+ 		
+-		JPanel topPane = new JPanel(new GridLayout(1,2,0,0));
+-		JLabel statuslbl = new JLabel("<html><html><h3><B>Status: </B></h3></html>");
+-		this.status = new JLabel();
+-		topPane.add(statuslbl);
+-		topPane.add(this.status);
++		Image logo = FolderManager.createImage("/images/TeamScreen-64px.png", "logo icon");
++		logo = logo.getScaledInstance(48, 48, 5);
++		JLabel logoPane = new JLabel(new ImageIcon(logo));
++		mainPane.add(logoPane);
+ 		
+-		middle = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+-		middle.setEnabled(false);
++		Image join = FolderManager.createImage("/images/join-enabled.png", "join icon");
++		joinPane = new ImageButton(new ImageIcon(join), "Join");
++		mainPane.add(joinPane.getIconPane());
++		Image leave = FolderManager.createImage("/images/leave-disabled.png", "leave icon");
++		leavePane = new ImageButton(new ImageIcon(leave), false, "Leave");
++		mainPane.add(leavePane.getIconPane());
+ 		
+-		JPanel topSplit = new JPanel();
+-		JLabel topSplitinfo = new JLabel("Im on top");
++		//space
++		mainPane.add(Box.createHorizontalStrut(75));
+ 		
+-		topSplit.add(topSplitinfo);
+-		middle.add(topSplit);
++		Image share = FolderManager.createImage("/images/share-enabled.png", "share icon");
++		sharePane = new ImageButton(new ImageIcon(share), "Share");
++		mainPane.add(sharePane.getIconPane());
+ 		
+-		JScrollPane logScroll = new JScrollPane(this.logDisplay);
+-		logScroll.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+-		logScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+-		this.logDisplay.setEditable(false);
+-		middle.add(logScroll);
++		Image setting=FolderManager.createImage("/images/settings.png", "settings icon");
++		settingsPane = new ImageButton(new ImageIcon(setting), "Settings");
++		mainPane.add(settingsPane.getIconPane());
+ 		
+-		JPanel bottomPane = new JPanel();
+-		this.enableToggle = new JButton();
+-		this.enableToggle.addActionListener(this);
+-		bottomPane.add(this.enableToggle);
++		Image pin;
++		if(pinned)
++			pin = FolderManager.createImage("/images/pinned.png", "pinned icon");
++		else
++			pin = FolderManager.createImage("/images/pin.png", "pin icon");
++		pinPane = new ImageButton(new ImageIcon(pin), "Pin");
++		mainPane.add(pinPane.getIconPane());
+ 		
+-		mainPane.add(topPane, BorderLayout.PAGE_START);
+-		mainPane.add(middle, BorderLayout.CENTER);
+-		mainPane.add(bottomPane, BorderLayout.PAGE_END);
++		Image exit = FolderManager.createImage("/images/exit.png", "exit icon");
++		exitPane = new ImageButton(new ImageIcon(exit), "Exit");
++		mainPane.add(exitPane.getIconPane());
+ 		
+-		this.add(mainPane);
++		joinPane.getIconPane().addMouseListener(this);
++		leavePane.getIconPane().addMouseListener(this);
++		sharePane.getIconPane().addMouseListener(this);
++		settingsPane.getIconPane().addMouseListener(this);
++		pinPane.getIconPane().addMouseListener(this);
++		exitPane.getIconPane().addMouseListener(this);
+ 		
+-		updateStatus();
++		this.add(mainPane);
+ 	}
+ 	
+ 	public void updateStatus() {
+ 		if(this.master.isEnabled()) {
+-			this.status.setText("<html><html><h3 style='color:green'><B>Enabled</B></h3></html>");
+-			this.enableToggle.setText("Stop");
++			//disable buttons
+ 			this.repaint();
+ 		} else {
+-			this.status.setText("<html><html><h3 style='color:red'><B>Disabled</B></h3></html>");
+-			this.enableToggle.setText("Start");
+ 			this.repaint();
+ 		}
+ 	}
+ 
+ 	@Override
+ 	public void actionPerformed(ActionEvent e) {
+-		if(e.getSource().equals(this.enableToggle)) {
++		/*if(e.getSource().equals(this.enableToggle)) {
+ 			if(this.master.isEnabled()) {
+ 				this.master.disable();
+ 			} else {
+ 				this.master.enable();
+ 			}
+-		}
++		}*/
+ 		
+ 	}
+ 
+ 	@Override
+-	public void componentHidden(ComponentEvent e) {
+-		;
++	public void mouseClicked(MouseEvent e) {
++		if(e.getSource().equals(joinPane.getIconPane())) {
++			if(joinPane.getEnabled())
++				JOptionPane.showMessageDialog(this, "Meetings haven't been implemented yet!", "Unimplemented Error",
++						JOptionPane.ERROR_MESSAGE);
++		} else if (e.getSource().equals(leavePane.getIconPane())) {
++			if(leavePane.getEnabled())
++				JOptionPane.showMessageDialog(this, "Meetings haven't been implemented yet!", "Unimplemented Error",
++						JOptionPane.ERROR_MESSAGE);
++		} else if(e.getSource().equals(exitPane.getIconPane())) {
++			this.dispose();
++			this.dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING));
++		} else if(e.getSource().equals(pinPane.getIconPane())) {
++			if(pinned) {
++				pinned = false;
++				Image pin = FolderManager.createImage("/images/pin.png", "pin icon");
++				pinPane.getIconPane().setIcon(new ImageIcon(pin));
++				this.repaint();
++			} else {
++				pinned = true;
++				Image pin = FolderManager.createImage("/images/pinned.png", "pinned icon");
++				pinPane.getIconPane().setIcon(new ImageIcon(pin));
++				this.repaint();
++			}
++			this.setAlwaysOnTop(pinned);
++		} else if(e.getSource().equals(settingsPane.getIconPane())) {
++			SwingUtilities.invokeLater(new Runnable() {
++                @Override
++				public void run() {
++                	//TODO open settings
++                }
++            });
++		} else if(e.getSource().equals(sharePane.getIconPane())) {
++			
++		}
+ 	}
+ 
+ 	@Override
+-	public void componentMoved(ComponentEvent e) {
+-		;
+-	}
++	public void mousePressed(MouseEvent e) {}
+ 
+ 	@Override
+-	public void componentResized(ComponentEvent e) {
+-		if(this.middle != null)
+-			this.middle.setDividerLocation(ImageObserver.WIDTH*0.5);
+-	}
++	public void mouseReleased(MouseEvent e) {}
+ 
+ 	@Override
+-	public void componentShown(ComponentEvent e) {
+-		;
+-	}
++	public void mouseEntered(MouseEvent e) {}
++
++	@Override
++	public void mouseExited(MouseEvent e) {}
+ 	
+ 	
+ 
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java
+index e1dcc47..0b8e2ec 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java
+@@ -42,7 +42,7 @@ public class PushSelect extends JFrame implements ActionListener, KeyListener {
+ 		this.master = master;
+ 		this.window = window;
+ 		
+-		this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); // Already there
++		this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Already there
+ 	    this.setExtendedState(JFrame.MAXIMIZED_BOTH);
+ 	    this.setUndecorated(true);
+ 	    this.setOpacity(0.55f);
+@@ -124,32 +124,37 @@ public class PushSelect extends JFrame implements ActionListener, KeyListener {
+ 			TeamScreenDaemon.logger.info("Display Selected!");
+ 			TeamScreenDaemon.windowPushed = this.window;
+ 			this.master.netHandler.requestConnecttoNeighbor(JArrowButton.SPECIAL);
+-			this.dispose();
++			this.close();
+ 		} else if (e.getSource().equals(btnnorth)) {
+ 			TeamScreenDaemon.logger.info("North Selected!");
+ 			TeamScreenDaemon.windowPushed = this.window;
+ 			this.master.netHandler.requestConnecttoNeighbor(JArrowButton.NORTH);
+-			this.dispose();
++			this.close();
+ 		}else if (e.getSource().equals(btnsouth)) {
+ 			TeamScreenDaemon.logger.info("South Selected!");
+ 			TeamScreenDaemon.windowPushed = this.window;
+ 			this.master.netHandler.requestConnecttoNeighbor(JArrowButton.SOUTH);
+-			this.dispose();
++			this.close();
+ 		}else if (e.getSource().equals(btnwest)) {
+ 			TeamScreenDaemon.logger.info("West Selected!");
+ 			TeamScreenDaemon.windowPushed = this.window;
+ 			this.master.netHandler.requestConnecttoNeighbor(JArrowButton.WEST);
+-			this.dispose();
++			this.close();
+ 		}else if (e.getSource().equals(btneast)) {
+ 			TeamScreenDaemon.logger.info("East Selected!");
+ 			TeamScreenDaemon.windowPushed = this.window;
+ 			this.master.netHandler.requestConnecttoNeighbor(JArrowButton.EAST);
+-			this.dispose();
++			this.close();
+ 		} else if(e.getSource().equals(btnexit)) {
+ 			TeamScreenDaemon.logger.info("Canceled");
+-			this.dispose();
++			this.close();
+ 		}
+ 	}
++	
++	private void close() {
++		this.dispose();
++		TeamScreenDaemon.nullifyWindows();
++	}
+ 
+ 	@Override
+ 	public void keyPressed(KeyEvent e) {;}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
+index 3cb808f..6bfe4a2 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
+@@ -32,7 +32,7 @@ public class WindowSelect extends JFrame implements MouseListener, KeyListener{
+ 		
+ 		this.master = master;
+ 		
+-		this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); // Already there
++		this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Already there
+ 	    this.setExtendedState(JFrame.MAXIMIZED_BOTH);
+ 	    this.setUndecorated(true);
+ 	    this.setOpacity(0.55f);
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
+new file mode 100644
+index 0000000..5b45dcf
+--- /dev/null
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
+@@ -0,0 +1,140 @@
++package com.aptitekk.TeamScreen.JNA;
++
++import java.util.ArrayList;
++import java.util.Collections;
++import java.util.Comparator;
++import java.util.List;
++
++import com.aptitekk.TeamScreen.JNA.WindowManager.GetWindowRectException;
++import com.aptitekk.TeamScreen.JNA.WindowManager.WindowNotFoundException;
++import com.aptitekk.TeamScreen.Util.WindowInfo;
++import com.aptitekk.TeamScreen.Util.WindowInfo.RECT;
++import com.sun.jna.Library;
++import com.sun.jna.Native;
++import com.sun.jna.platform.unix.X11.XWindowAttributes;
++
++public class X11Native extends WindowManager {
++
++	@Override
++	public List<WindowInfo> getWindows() {
++		final List<WindowInfo> inflList = new ArrayList<WindowInfo>();
++		final List<Integer> order = new ArrayList<Integer>();
++		int top = X11.instance.GetTopWindow(0);
++		while (top!=0) {
++			order.add(top);
++			top = X11.instance.GetWindow(top, X11.GW_HWNDNEXT);
++		}
++		X11.instance.EnumWindows(new WndEnumProc()
++		{
++			@Override
++			public boolean callback(int hWnd, int lParam)
++			{
++				if (X11.instance.IsWindowVisible(hWnd)) {
++					RECT r = new RECT();
++					X11.instance.GetWindowRect(hWnd, r);
++					if (r.left>-32000) {     // minimized
++						byte[] buffer = new byte[1024];
++						X11.instance.GetWindowTextA(hWnd, buffer, buffer.length);
++						String title = Native.toString(buffer);
++						inflList.add(new WindowInfo(hWnd, r, title));
++					}
++				}
++				return true;
++			}
++		}, 0);
++		Collections.sort(inflList, new Comparator<WindowInfo>()
++				{
++			@Override
++			public int compare(WindowInfo o1, WindowInfo o2) {
++				return order.indexOf(o1.hwnd)-order.indexOf(o2.hwnd);
++			}
++				});
++		return inflList;
++	}
++	
++	@Override
++	public WindowInfo getTopWindow() {
++		final List<WindowInfo> topWindowList = new ArrayList<WindowInfo>();
++		int top = X11.instance.GetTopWindow(0);
++		X11.instance.EnumWindows(new WndEnumProc()
++		{
++			@Override
++			public boolean callback(int hWnd, int lParam)
++			{
++				if (X11.instance.IsWindowVisible(hWnd)) {
++					RECT r = new RECT();
++					X11.instance.GetWindowRect(hWnd, r);
++					if (r.left>-32000) {     // minimized
++						byte[] buffer = new byte[1024];
++						X11.instance.GetWindowTextA(hWnd, buffer, buffer.length);
++						String title = Native.toString(buffer);
++						topWindowList.add(new WindowInfo(hWnd, r, title));
++					}
++				}
++				return true;
++			}
++		}, 0);
++		return topWindowList.get(0);
++	}
++	
++	public WindowInfo getWindowbyTitle(String windowTitle) throws WindowNotFoundException {
++		List<WindowInfo> windows = getWindows();
++		for(WindowInfo window : windows) {
++			if(window.getTitle().equals(windowTitle)) {
++				return window;
++			}
++		}
++		throw new WindowNotFoundException("", windowTitle);
++	}
++
++	private int[] getRect(int hwnd) throws WindowNotFoundException,
++	GetWindowRectException {
++		RECT r = new RECT();
++		int result = X11.instance.GetWindowRect(hwnd, r);
++		if(result == 0) {
++			throw new GetWindowRectException("" + hwnd);
++		}
++		return r.asArray();
++	}
++
++	public int[] getWindowRect(int hwnd) {
++		int[] rect;
++		try {
++			rect = getRect(hwnd);
++			return rect;
++		} catch (WindowNotFoundException e) {
++			e.printStackTrace();
++		} catch (GetWindowRectException e) {
++			e.printStackTrace();
++		}      
++		return null;
++	}
++	
++	@Override
++	public synchronized WindowInfo updateWindow(WindowInfo w) throws WindowNotFoundException {
++		List<WindowInfo> windows = getWindows();
++		for(WindowInfo window : windows) {
++			if(window.hwnd == w.hwnd) {
++				return window;
++			}
++		}
++		throw new WindowNotFoundException("", w.getTitle());
++	}
++	
++	static interface X11 extends Library
++	{
++		final X11 instance = (X11) Native.loadLibrary ("x11", X11.class);
++		X11 INSTANCE = (X11) Native.loadLibrary("x11", X11.class);
++		boolean EnumWindows (WndEnumProc wndenumproc, int lParam);
++		boolean IsWindowVisible(int hWnd);
++		int GetWindowRect(int hWnd, RECT r);
++		void GetWindowTextA(int hWnd, byte[] buffer, int buflen);
++		int GetTopWindow(int hWnd);
++		int GetWindow(int hWnd, int flag);
++		
++		XWindowAttributes FindWindow(String lpClassName, String lpWindowName);
++	    int GetWindowRect(XWindowAttributes handle, int[] rect);
++	    
++		final int GW_HWNDNEXT = 2;
++	}
++}
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java
+index c95760e..79ab752 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java
+@@ -26,6 +26,7 @@ public class TeamScreenBroadcastThread extends Thread{
+ 
+     public TeamScreenBroadcastThread(NetHandler master) {
+         super("TeamScreenBroadcastThread");
++        setDaemon(true);
+         this.parent = master;
+         try {
+         	InetAddress address = InetAddress.getByName(getLanIP());
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
+index eefbd7c..4a8eade 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
+@@ -87,9 +87,7 @@ public class NetHandler {
+ 		try {
+ 			this.broadcastThread.start();
+ 		}
+-		catch (Exception e) {
+-			TeamScreenDaemon.logger.warning("Broadcaster was either unable to be started, or doesn't exist. Restarting... Caused by: ");
+-			TeamScreenDaemon.logger.severe(getStackTrace(e));
++		catch (IllegalThreadStateException e) {
+ 			this.broadcastThread = null;
+ 			this.broadcastThread = new TeamScreenBroadcastThread(this);
+ 			this.broadcastThread.start();
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+index 46d686f..2190ade 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+@@ -57,6 +57,7 @@ public class DynamicJRCServerApplication extends Thread {
+ 	public void run() {
+ 		DynamicJRCServerApplication.threadRunning = true;
+ 		try {
++			System.out.println("Window hooks placed");
+ 			this.windowUpdater = new Thread() {
+ 				public void run() {
+ 					while(threadRunning) {
+@@ -67,7 +68,7 @@ public class DynamicJRCServerApplication extends Thread {
+ 							if(controlAdapter != null)
+ 								controlAdapter.updateWindow(window);
+ 						} catch (com.aptitekk.TeamScreen.JNA.WindowManager.WindowNotFoundException e) {
+-							System.out.println("Window must've been closed...");
++							System.out.println("Window hooks removed");
+ 							e.printStackTrace();
+ 							break;
+ 						}
+@@ -110,6 +111,7 @@ public class DynamicJRCServerApplication extends Thread {
+ 		}
+ 		this.serverRunning=false;
+ 		this.server.stop();
++		this.windowUpdater.interrupt();
+ 		TeamScreenDaemon.logger.info("RCD Server Stopped");
+ 	}
+ 
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java
+index f923676..2ea1188 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java
+@@ -104,6 +104,7 @@ public class PropertiesHandler {
+ 		prop.setProperty("KeyStroke", String.valueOf(JIntellitype.MOD_CONTROL + JIntellitype.MOD_SHIFT));
+ 		prop.setProperty("KeyStrokeEnd","1");
+ 		prop.setProperty("Log", "false");
++		prop.setProperty("NotificationLevel", "warning");
+ 		prop.setProperty("LNeighbor", "");
+ 		prop.setProperty("RNeighbor", "");
+ 		prop.setProperty("TNeighbor", "");
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index 91de902..f52da3b 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -1,6 +1,7 @@
+ package com.aptitekk.TeamScreen;
+ 
+ import java.awt.AWTException;
++import java.awt.Desktop;
+ import java.awt.Image;
+ import java.awt.MenuItem;
+ import java.awt.PopupMenu;
+@@ -11,6 +12,7 @@ import java.awt.event.ActionListener;
+ import java.awt.event.KeyEvent;
+ import java.awt.event.KeyListener;
+ import java.io.IOException;
++import java.net.URI;
+ import java.net.URL;
+ import java.util.HashSet;
+ import java.util.Set;
+@@ -22,6 +24,8 @@ import javax.swing.ImageIcon;
+ import javax.swing.JFrame;
+ import javax.swing.JOptionPane;
+ import javax.swing.SwingUtilities;
++import javax.swing.UIManager;
++import javax.swing.UnsupportedLookAndFeelException;
+ 
+ import com.aptitekk.TeamScreen.Frames.MainFrame;
+ import com.aptitekk.TeamScreen.Frames.PushSelect;
+@@ -33,6 +37,7 @@ import com.aptitekk.TeamScreen.Util.LogFormat;
+ import com.aptitekk.TeamScreen.Util.WindowInfo;
+ import com.melloware.jintellitype.HotkeyListener;
+ import com.melloware.jintellitype.JIntellitype;
++import com.melloware.jintellitype.JIntellitypeException;
+ 
+ /**
+  * Main tray for TeamScreen, stays dormant until user action
+@@ -58,7 +63,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 	static TeamScreenDaemon TSDaemon = null;
+ 	static boolean enabled = true;
+ 	static WindowSelect wSelect;
+-	public static PushSelect pSelect;
++	static PushSelect pSelect;
+ 	public static WindowInfo windowPushed;
+ 	
+ 	static WindowManager wManager;
+@@ -71,7 +76,13 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 	public static void main(String[] args) {
+ 		//start meh up
+ 		//set look and feel if wanted
+-
++		try {
++			UIManager.setLookAndFeel(
++			        UIManager.getSystemLookAndFeelClassName());
++		} catch (ClassNotFoundException | InstantiationException
++				| IllegalAccessException | UnsupportedLookAndFeelException e) {
++			e.printStackTrace();
++		}
+ 		new TeamScreenDaemon();
+ 	}
+ 	
+@@ -112,7 +123,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 			
+ 			this.netHandler = new NetHandler(this);
+ 			
+-			trayIcon.displayMessage("Ready", "Initialization complete.", TrayIcon.MessageType.INFO);
++			displayPopup(trayIcon, "Ready", "Initialization complete.", TrayIcon.MessageType.INFO);
+ 
+ 			//openMainWindow();
+ 			
+@@ -122,11 +133,46 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 			e.printStackTrace();
+ 			JIntellitype.getInstance().cleanUp();
+ 			System.exit(0);
++		} catch (JIntellitypeException e) {
++			JOptionPane.showMessageDialog(null,
++				    "TeamScreen is already running!",
++				    "Redundant Process",
++				    JOptionPane.ERROR_MESSAGE);
++			System.exit(0);
++		}
++		
++		//Thread.currentThread().setDaemon(true);
++	}
++	
++	public static void displayPopup(TrayIcon tray, String title, String text, TrayIcon.MessageType type) {
++		try {
++			if(properties.getConfig().containsKey("NotificationLevel")) {
++				if(properties.getConfig().getProperty("NotificationLevel").equalsIgnoreCase("warning")) {
++					if(type.equals(TrayIcon.MessageType.WARNING)) {
++						tray.displayMessage(title, text, type);
++					}
++				} else if(properties.getConfig().getProperty("NotificationLevel").equalsIgnoreCase("info")) {
++					if(type.equals(TrayIcon.MessageType.INFO) || type.equals(TrayIcon.MessageType.WARNING) || type.equals(TrayIcon.MessageType.ERROR)) {
++						tray.displayMessage(title, text, type);
++					}
++				} else if(properties.getConfig().getProperty("NotificationLevel").equalsIgnoreCase("error")) {
++					if(type.equals(TrayIcon.MessageType.ERROR) || type.equals(TrayIcon.MessageType.WARNING)) {
++						tray.displayMessage(title, text, type);
++					}
++				}
++			}
++			else {
++				System.err.println("No NotificationLevel found");
++				tray.displayMessage(title, text, type);
++			}
++			
++		} catch (IOException e) {
++			e.printStackTrace();
+ 		}
+ 	}
+ 	
+ 	public void enable() {
+-		trayIcon.displayMessage("TeamScreen now enabled!", "Services started.", TrayIcon.MessageType.INFO);
++		displayPopup(trayIcon, "TeamScreen now enabled!", "Services started.", TrayIcon.MessageType.INFO);
+ 		logger.info("TeamScreen enabled.");
+ 		enabled = true;
+ 		this.netHandler.enable();
+@@ -134,7 +180,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 			frame.updateStatus();
+ 	}
+ 	public void disable() {
+-		trayIcon.displayMessage("TeamScreen now disabled!", "Services stopped.", TrayIcon.MessageType.INFO);
++		displayPopup(trayIcon, "TeamScreen now disabled!", "Services stopped.", TrayIcon.MessageType.INFO);
+ 		logger.info("TeamScreen disabled.");
+ 		this.netHandler.disable();
+ 		enabled = false;
+@@ -203,15 +249,20 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+     		            }
+     		        });
+                 } else if ("About".equals(item.getLabel())) {
+-                	JOptionPane.showMessageDialog(null,
+-                            "TeamScreen\n"+
+-                    		"Copyright 2014 AptiTekk LLC");
++                	if(Desktop.isDesktopSupported()) {
++                		try {
++							Desktop.getDesktop().browse(URI.create("http://aptitekk.com/our-products/teamscreen/"));
++						} catch (IOException e1) {
++							e1.printStackTrace();
++						}
++                	}
+                 }
+             }
+         };
+          
+         openItem.addActionListener(listener);
+         pushItem.addActionListener(listener);
++        aboutItem.addActionListener(listener);
+          
+         exitItem.addActionListener(new ActionListener() {
+             @Override
+@@ -224,16 +275,12 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+     }
+ 	
+ 	protected static void openMainWindow() {
+-		if(frame == null)
+-	    	SwingUtilities.invokeLater(new Runnable() {
+-	            public void run() {
+-	            	frame = new MainFrame(TSDaemon);
+-					frame.setVisible(true);
+-	            }
+-	        });
+-    	else {
+-    		frame.setVisible(true);
+-    	}
++    	SwingUtilities.invokeLater(new Runnable() {
++            public void run() {
++            	frame = new MainFrame(TSDaemon);
++				frame.setVisible(true);
++            }
++        });
+ 	}
+ 	/**
+ 	 * Obtain the image from inside the jar
+@@ -249,7 +296,6 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+         	TeamScreenDaemon.logger.severe("Resource not found: " + path);
+             throw new NullPointerException("Resource not found: " + path);
+         } else {
+-        	TeamScreenDaemon.logger.severe("Resource found at?: " + path);
+             return (new ImageIcon(imageURL, description)).getImage();
+         }
+     }
+@@ -318,5 +364,11 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 	public static WindowManager getWindowManager() {
+ 		return wManager;
+ 	}
++	
++	public static void nullifyWindows() {
++		wSelect = null;
++		pSelect = null;
++		frame = null;
++	}
+ 
+ }
+diff --git a/TeamScreen/src/images/exit.png b/TeamScreen/src/images/exit.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..87cba421a547aa3312eff54f8aa272cb5531d954
+GIT binary patch
+literal 362
+zcmV-w0hRuVP)<h;3K|Lk000e1NJLTq000mG000mO1^@s6AM^iV0003oNkl<ZILl*T
+zKm&}G{|p!^{>=p9n?U>%ib3p|U^!fXrRonCP|<84{tMN#7l@}q@m{DHNNzS*Ef&oO
+zf%rd20dv(~33Lm<Vh{^JY7U|r0+nE__?N*z0D#p%EkgG5Uzh-M<zES)qU9`Ae}!P0
+z*lPZ;0mbGsR{qsPvhXh?OdtXF6XtB7!i@|S|3NmKWvTun#8La3jR7Hcowwl!6Vy9D
+z!Fr(~ycfx@QV=nSAwUB+L)ovHD*x#rd3!Hd9n_?$sDX-X2t+f`U_F$;fW*#EtOkIb
+z4YYYHk^vV%-oa%6iWfiuhUDkh$lgH?SY$7t2jWs>XQO)O-$}kkv_M3UMqof$0oiwv
+z0}L9lSAl9HFryJmLgK3b#e$xIU}6{vi8@J{(#(XC)=A9H01`W7C80%@;Q#;t07*qo
+IM6N<$g6KV!Gynhq
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/join-disabled.png b/TeamScreen/src/images/join-disabled.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..3628cd9f4851f3818c31a38fd3b125a8c42d100c
+GIT binary patch
+literal 385
+zcmV-{0e=38P)<h;3K|Lk000e1NJLTq001xm001xu1^@s6R|5Hm0003<Nkl<ZXx{Ca
+zO%8%E5QRB~Ys1>OFdoN~a07lq2^aAQp2d|R90I2XOf@A@I&UgwUNV7%Q23ZfJ8hFh
+zrBbO@tGcdFWm#siqN=Ja6d)~%;+p6A5F_Z>14kAf5Vo<YQLc0M=sRZturkIxAvgg(
+z2^N4c6I*FJu>x2%O|v18BP!^}y+AA^B?36ZEF=X0u~6H#DW!NP3BZ~G^8SGu>(CG|
+z3t52it8~<*!XRK48Z$68+M^)Q7IISy$%NNJR1n?hLTL1!L54jOUJG#z=`;7TLU=9o
+z%?mDsu@HNhh1?1cShMuh#Rfyfu+WR0LLp*Vh!sFBw7^2FKe4oh*t^mH8^}2HRtrH(
+z35i+=TFhxVJqI8)p@CRPa!RR_`d<NnWI$qJOP3aXnih9gxjG$lk02Pp-5ZD%p#baN
+fVp6G8s$ks#%>1pBMNOFz00000NkvXXu0mjfwq%!B
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/join-enabled.png b/TeamScreen/src/images/join-enabled.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..6d6f78844cedc331ffa2ed8aff68a16bf2a6c378
+GIT binary patch
+literal 414
+zcmV;P0b%}$P)<h;3K|Lk000e1NJLTq001xm001xu1^@s6R|5Hm0004HNkl<ZXx{Ca
+zU2cLv6omneXcJ%iY<zC|V7i>{qcE`~uE-_0mOeFv6(}+|pyE$PqnUdyrMV}$Fi!(t
+z&H?TWo+lECM4i=OzWof8R&7;Z70L-<_?=JvNdI_Wx@@D&wM%Cg!Xrdf?kBF!RO9or
+zWlREa;l%L<C}Hjt89?pCJfCpKi4>sHOR{-2k@`SY5Em;*gt%k?maqu10U#nYUaY6)
+z8F*s_pmboA<TEo_YH|vNfJLYRI9Qqv6C4CALN!3tOqz{A5YPx+S(_pttP$#|;x~x3
+zQ~9yZEFT$iC#(_jBTe7K9LCfT)(F*y2l|eu>vWOK^h)or2sI91dzLIDfMAc%b(~xw
+zT8R)jfJErYG5JHx86n7P^xu8RDAcqPCu?!71iBZ3H*?ZX-vD4+&>$kjx}=mv{a*n<
+zIKZ;8C0mOYU2L;=ZFf3s@gIRRfOT7)v77-q|BFc^5{aC(19gitPj^O~V*mgE07*qo
+IM6N<$f)t#rKmY&$
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/leave-disabled.png b/TeamScreen/src/images/leave-disabled.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..3ff61caafd240237232f08b91ce974406e4e07de
+GIT binary patch
+literal 383
+zcmV-_0f7FAP)<h;3K|Lk000e1NJLTq001xm001xu1^@s6R|5Hm0003-Nkl<ZXx{Ca
+zy$!-J5QS4BDu$t;VgiO>4up^>^Z(N$MnFtJ%_Ph~1?K|E5l(WBeRdq(lTM_FocrV#
+z{Om*#i^XDjRhDIkG)=u$(=?0G07;U3;yCtNRaLEw0mN_LHRe9dII3%70E%)7Fe?ke
+zOZ6y<Vog;r{+-l9@POOs!4QJ+FQgW70YGh`Nz6c==Q}ijOAEomxrb+5<*Ms?sp#to
+z_a0FIE-i$W01&+a#0dr9Y6f%wetq>qxVDfEfZSIngl!9zWx0VdUZw?oz2&|-A#7U+
+z7OSmEE>dNyUI^P3vI)>t0C6U>kN}|0PA!PgEc6EvqJ>&kVhcI8kn$xC$wJD%QC`Rh
+zBxj+)C^7XcG#KVMPHTu{Lo>xqz1EhJH}#qT)aOFs9c<0&XmLy`G>r^A1HQ`$Aox#A
+dEEbF9RbT3NTF7kxOSk|4002ovPDHLkV1fvro?HL`
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/leave-enabled.png b/TeamScreen/src/images/leave-enabled.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..8317088eadfbd7b8c3ce433decc8f17bed4ab487
+GIT binary patch
+literal 406
+zcmV;H0crk;P)<h;3K|Lk000e1NJLTq001xm001xu1^@s6R|5Hm00049Nkl<ZXx{Ca
+z!EJ*u6o!GOYT84ZVS4DP6J&^N5io&>L8^{WWrChFNk%|Pz^;`@5h;*9$9^`B-Y@;a
+z2W0%oKjzs40f|H+In{{OEMnZLr$srw86b?g2o`QVS(Q_LfLNT|*M=C<Pe)rHKxL2!
+zFlJ`pULq7F_0Lmwc*Am-@HJ|LB*6F0ok5<L@K4kTSph(f&>&{uF|B5B0E-clAFjEC
+z_-gvKC|_DP#(eX@swE7-VuZkw0McT_svHJjX$If`VsjeTKM=Mfqy%st*A)oU5qi$|
+z?@_|Hx|W09U946|h`J47Izr>@@S#%|U9_9mJ_yqhG78XX36a(XT7-@O*!5Er!mkL4
+zHiUl>`V%FJknIR{zQo={sBami4;g~awGgC~7<4TJDdwo0h6`syGr&!~+Ln?w^@;$<
+z=RzJHY~9n*qKh`o0Lt;Yg0%p=|HVWikw{MU3(RiS@NJ6k!T<mO07*qoM6N<$f)0qV
+Af&c&j
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/pin.png b/TeamScreen/src/images/pin.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..715da64b073360e3469eff94f2cdd3eb5238333b
+GIT binary patch
+literal 262
+zcmV+h0r~!kP)<h;3K|Lk000e1NJLTq000mG000mO1^@s6AM^iV0002ZNkl<ZILl*T
+zKm*KGe+?Ka{{6>>!E!`_ihmn{ct1nMe=P|9w-+o%EMThqYX;Qtlc(V)2M7b%-+^Kl
+zL>s_W_lpl`^MBTwKXM=pVuQtq1wg;*0B!xtRsV|zgh6bu7_oq{;@^CrrmaX}vK1^w
+zl;+BRK0pm$fqvFN3KI>G7+8*o7`O?vtqhB+DnN3C{0@q;|4fzt(tx%_AY+giG%aZ1
+zGyv#SE1;sw_%K)v39+Gt*G3}3<1`o#c>@-btsfY5HEcD1*zl<V0F23=233|9!~g&Q
+M07*qoM6N<$f^QsXDF6Tf
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/pinned.png b/TeamScreen/src/images/pinned.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..170c532cc44f89751e830d821c0bb28c420c768c
+GIT binary patch
+literal 313
+zcmeAS@N?(olHy`uVBq!ia0vp^0wB!61|;P_|4#%`jKx9jP7LeL$-D$|SkfJR9T^xl
+z_H+M9WCij$3p^r=85sBugD~Uq{1qucL9r6oh?3y^w370~qEv>0#LT=By}Z;C1rt33
+z>la@$fhyK`x;Tbd_$Ny+Htc-0UM%=&ytan8FoURs!%U5aji2W8J0IOY+u@IVhrV;`
+zMuv{2UWaI%9k1#>GV)$YT=T<RUgMjnN4P=gKX2t@4SOB_%w71%zT>ZW$95*(D-52@
+zu|kYbgpD5T7xO>t&v$K>eNoKU{S^z05*UmbM8q6^nFz(52>aaLE5z)_yf>Wr^PxJ0
+zf1Zuv2O2ZlR0U3Ruqi#g=)utNr_WrGxAedP28Qyf^Vs(Md#4I?H-o3EpUXO@geCwh
+Ct8DlH
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/settings-hover.png b/TeamScreen/src/images/settings-hover.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..502dfb6ebbcf89166bc6be98528751cb56f3b919
+GIT binary patch
+literal 1154
+zcmV-|1bzF7P)<h;3K|Lk000e1NJLTq001xm001xu1^@s6R|5Hm000C@Nkl<ZXx`mf
+zJ!lj`6h7n#A`(K7AXY(AgcLzUf`y2Pg@hE6LPQRW5X3@6L@a`>$lc{~xnFaU3y~Be
+zR$`UPLM$u}ix5OaQiKpJf{26=LeTG-o%n8UW_IRw_wI1uC3~|oZ@zEdH*aTlW3m6W
+z6bgl|>FMdQbUOV6_5!v9%fJ%ZY__l6_<T#HQaJ*!&r_+?Z(+$~Qe5xh-pfoTGtdew
+zn9Ocik8{WQ`S}JCl5HbO6H$Pkot^E$*iSLWIvZ~Tb?KRznO<iSH2W$e#~|@AOz;3W
+z2)}EFG1n3OA!~=#YW0wWLQZ7+a5xqs_)R_rpDcF0hPBx3Ou`_i4e0cE7~rMJ(HihP
+zb{c?3LS>NBy)eLg1omis!4d{3t;En^(j_f=Bvw>%LVYa=cs9EP{yN>G{~8IA?Z)t@
+z23xfyF*i3CNBb>JSod+?DcxaQSvH5@X<ZRWQx+rwKfTUYBq*%9kdnd2*=E2q+0=n&
+z^$FA^Bnf>W0{e`;kpx2BZ<u{S;Gzq7m24E?$GyqB$t48IPX3L61Vl*!b*FIevtMRF
+zyO9uOa|j;w*CaW;FBXe&BJfeMy6Z@w^CfzCn4}{NQMwwUZ0f+XJ~h-GJdF{Cq~-y&
+z3I`8xf7vD{i@xZSb&(B#+_0H>hU*`AufY(l16z<5_6z%%ei=OK8f1g9m9oKaoos5#
+zeGq2(m5n@X4gOYhxm?{k!oZg)?Fo4Z@TjkojSQa4M!Si_jg#{JL$Tknk`Q~$t4Lg-
+zq#=XX%{-Tl?+z55Mid#TY12glnd5{FcwgCQA~B2(U!s;%xm@nSI6nf(MprOH$B+T0
+zTy}*j2|38AVdlNQpPa$-vbeYyr>80%R$v8KiBcrMyoK`}S28LRrBbQa13%7XLz_Zm
+zt>(e|m3%(mhe2M4B&S}nAM@Ho3tkl3RwE)+8wpv;X}e|MMOj!_Xdq!jMnmF4OTo(|
+z!jMzj3MUa%PHijlq2HDak?5E=eSU|2!{NNMNHim-wvwO>!hg%z$$?DkNzkDub?|yI
+zsUp$QauVQ$nMib;oUmB$D;{7wbn@cun$1o`0@93zga9vveg~VfQC0gO*(r1qx|!F3
+zmq<9tDRdIef)~a6*5H(##F_|9!c{hYBw8vb&CKt*f>)8SkdT~W?RTv7rPBLO6?o?5
+zB0eG-W}Nm(%diTrx7aRr$!Y-l#EOpJf@t2Bgz7wj`e&jY#v9~sFz5rI(J>ly3)W%D
+z#wHS6Lh?8yA9nA&(J350QiT*zxfLdOQE<3#kQ09A#C<H@0sguL1ctTFaKJd4s(%41
+zLi#QW@G=Q$%r`^?*WX$FX1QFBn`Zy6A~Spi>oZXjkRzeVLZpJ*Mki=+j=eQogTo0p
+zj$2{~T=Mxmkw~Y!FGu`40;;F1oDc~#z5{1ntpY9=dhJhu0lYwK62DKk3rnQs4-0?}
+UrY|}ua{vGU07*qoM6N<$f@eDs&Hw-a
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/settings.png b/TeamScreen/src/images/settings.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..54bda3af32b5a1279fadca4b42e808017b3abf23
+GIT binary patch
+literal 1333
+zcmV-51<Lw~P)<h;3K|Lk000e1NJLTq001xm001xu1^@s6R|5Hm000F1Nkl<ZXx`mf
+zO=uKJ810$uOeWbl8ONZj2!@zL$U&Ax#Dj<|dl1QC@gO2$4?z|Wi!36V%wJ4QR-<M`
+zWDyY$i-$!#$(}rU5Dy-PJ%}ueEIEkC;)Wzj==tgH_^PLCy1Ki1x_YK(CRp$#J=OK|
+zUVX2=s;-ix&ow1ymDm?)Z7edS&%=I)J%BAnr?l~SuCl$;_<Yl@t7}n!y(dj>Y#4UY
+zG~>5k0hvEyS#`J_So&v`1S}c2;_hn>5-!u%<+L`@3eY|IauR)CiA?Hm(2vm{p5G$x
+zdOTN71t)P4jqnVOLu%*41P{-S0PIqoKHqd@)KTFE_uN?Z^Mr;5$HD<$89{sRs<PEL
+zYX4o&`Vu^m2#o}BZ(_FC7YcX^*2kh#dNxo8H4+}Kg_O>Q0=_!J6|^@YXS8vz{xE1S
+zB@{Z{ol}LwA|ZhY^wMKQ3Qd8xBw3Nu>Iw1=LE;2oLWb8%68;omui|;J*uLY+M;Yap
+zz2?HeFTuhc))X>f8QECijd?{tddqfQLV-2Y9YQ3~_=IP4fOY59ZyEw`%Ekr0mamOF
+z<%GJ=i3c>sC3Q)l!$HY5`s`#g3FOqnfxvTQ!vTNX7`%*jij@%N<7q-*&EXa<352X&
+zc=xwoWQgb01L4WW0+0OfSvjHpv*cw(CInt^X19$57M3H%idaWF)Vi|j(GX>02XECW
+zbY&{l)ff?F!4`KJIUz!wLu7g4l1d#3q0Y@9vH`f0{E=7P;H$VS@MeKg5<Nr~4l&a|
+z_D+`vo#1=&ZrPyk>d0s9;F0eon*w(q1TQ=kk%y?Ey;psgO161~$^9+a{84#O@Ug62
+zHZJg%tP7r-xb9r#E7$(R_AD-;+Gue|0PJ@pXt=<8jXWb8-yJ9_9grLmsVOr(@#VCg
+zME~XDfDm{;+3*q?-G>VQge@m0iPU^CiGEg^l8smDpDp$xlB6TfU11Z?JQ9qY+#_EF
+z|5sq}Y#O?`DkJP2#_D$-gl@xrBOwy2-=FA65s{FeoKka2$|Q5#CL3%Dd#6i{gZE2Y
+zW=h+mY3)%sa#B(eb3bO5X)Sn~1{as3@W}nJ<U~Sj+rZPb_t*ccBm^YnloMy2IMi0~
+zG!0P_AuM(sOM6)o0p+xLNG!f5B<=+bwS+`ZzP!mu1eMd|<|7eYPMsuy&EO#$31@T?
+zl~X53;KSpbdAzv5<~JOj+DU?fr`u^KiH4(7J4gW7&-U*DgM@;PN7!=aiXA*Ufkbz!
+z?jdU6?I*?xJ`IoY$`9UHZa6xHPQo?vKHynTU?&?)PGOVql8qmDns#4XsgejHCv#3T
+zO(LjlJV`99Se|H?oIGSx3JTuk2>}VQC(_1&TdpF$V@=EyW8|KSJMx*vz|*wz>Z<S6
+z74}I_Q0A_29&6^~_XE*U9|PlmIR{rwgLjeO-Zf}<XgP9c#-3pG=F9bu@bSfzsIhj+
+zCM57Ii3s%s)0eX!A|Lur&Zr0LHVXC^crKOG+7DrZr)gkr%_3n*<rd?CVfMHM<o0<s
+zw&hYWZolrSeSAD^1$Y+;=A;jOK8{Z5xA6QQlmBkp{JLCk^nc=<RKEu6uUkpL<q1v{
+zBF~tcKh|voK=(`5so4?;O>CW0WI+r~r~a7_WMW^J=*<yxkAVENP$Pr{3ZLnlDaG0a
+roP%K$5=z5vLq-?yd#F=bTADrqoV#YgT1fKl00000NkvXXu0mjf9oKdd
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/share-disabled.png b/TeamScreen/src/images/share-disabled.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..efe14949b247e46f6d0628b16595dd70d44e698d
+GIT binary patch
+literal 1122
+zcmV-o1fBbdP)<h;3K|Lk000e1NJLTq001xm001xu1^@s6R|5Hm000CjNkl<ZXx`mg
+zEpHn^5IqG%1qB5LRTWqj1VjZ@K~Pa;98{2>5EK+u`2#sS{yNoi!UGDbfMBbj3JeIS
+zjDjkwu)s2iqEkE1+P$vFdwV;3cTUxnMzVajGjC>RXJ=+FiYgf0Zg;EIYV8vxaU73{
+z?uceYsiK+sZ;W^FF6LAryA0?C0XZa4H$=ZrPEJIGIhYF`;I%g3olfTk3H?OE=L$py
+z$N(n&JqJ(lt_^sSB%37U*aYsPKxLrFF=SN={`B;8o0#8vy2d@xgn+=`FBM^5Oz_N;
+z$1P-50>0gD@2O3gYdz)5M<n#k+1XjH_3#Yu;9b3U9IG*d?6TkwR1~qfNlHL2$ZubV
+z^2c280IwY5q`*)HeBKgYlO=a5S>kBnqC4Q37p=rfD7Q(On}8nZ*%7(IMpfYT08j9S
+z3`<l?z1>M|*qOy;X7sEn1vVHAo(or_>5%W<*a%;?XrngNt`t1Y!Fe&IgX)!V-Y#U?
+zqLVYkA_iMF(?f{m2}EL8PppJmi3f8Z;x{l_C*Tyc9a8Yi5bzd5ObL{9C5|kvG`F7E
+zILd9&M!I1&_?(C$QsVsle8U!<fOY9bBvab@=FXRfN@CnEN*SO8S@5MVPZeTQ7MbQt
+z382a<mzD|#jMVaiTxi<s^}Ll(haJavn7x2wogW^O6PCdD1JdaqzDfWKKU9HPyU&)z
+zayJt2p&2NYAo*TO@VW!P7ex`OBg^u5MIIA;iFDda36%hHocnmN5;c%9dVudr-Nxlk
+zMM?mZB^o7InlW3}dsj-V!B<$sWbWjOPQYZ=6Kc*lQpL8(XyO7-mij=Ne`EALK$%}O
+z@7myTO@{eA8jYSh_Q8b7xr=ztf$GV}|JjPXm%0tf`6`tIY&=Jcc-o8-Fhl{V+XO0b
+z$y_Lnc*Rvl0f`HRtTeFks_?&Xp*t20CQ`=ze!oExq$wc^25+TufQ`A(ViS+qvJ{5V
+z#~3<{GOXj^gUlRc(H(N53ki{oj}jTV2N{lIzR7%32|d;kg>)*xs<Zu-WKNNHGG{7K
+zXB3KABP>hi^uv<rbgfaynNF+aIkZ^FyP&zcy4oOmA|&rX0W4-krVQ}6pfO8I^N{c@
+zDJg&191e#KAwBcqtxHN?*st6vlqu@#av{h@l2=&ND?eMbRrrSUX{*!~g>+km9bWU?
+zix72zvC<DMYHZQ-cl6#*36ZQX1w6CH7R%L+b0<~ZS_~b*twp8zc5J!Ohy$Cu(qT4t
+zSud!#xocP;Yp*j4tgXGy<odVQ4J8ipIu3D77aV!=%HGnXwrCRn>sL&M5_`4{#X?)~
+zC7*+D`Aa@yiLtS79WJ$0PsEOER!<()U9;-JFS>0@UZyXkyUw*-beqHc)S$x7T>YOK
+o@WDU!2&DCY?2)6)qkV4k2L%q{Y&OeM+W-In07*qoM6N<$f*EfO5C8xG
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/share-enabled.png b/TeamScreen/src/images/share-enabled.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..e3577c7c59566a7a14928787453db7e311839df8
+GIT binary patch
+literal 1205
+zcmV;m1WNmfP)<h;3K|Lk000e1NJLTq001xm001xu1^@s6R|5Hm000DhNkl<ZXx`mg
+zJ8u&~5O$ozF#<#+A_bw8h=L+Yfhee`AT<?5egah*Y{w1=@vIPv@(*x9f$|G13Y0Ph
+z1&T!E3L#1gV}X5-Ff;e??%wX*&fVETth7p$+|7LR*x7kprBcGGcbv6q)7zSB`g?N?
+zzX!VydjQ)D_aOXR51+wj@trbw7XiHjK(+zYQKjLZRvs}oyo2u|4Wu<Q;I+1M6|}ey
+z0EU&uDS!z#{q6@p*}wZkq=~er27LMH@7jFRYsbK|b}nK3A@V?8Wo!KgnESJ(YmDI8
+zW6&u2`$4$zTpZ*7Y-k`a<XH;%g_e6C7!S<a28K=Y<;G&$y}9~oXw)A551+wj@f|ul
+zW@`+Hcab&U@*V;q&j8%3HvMj`?QZ0^th<3Uh==}cc!Z$<c)f|6{vl{`y%ZC}THJBh
+zk)|nHv4sfTM%GH85eJAhz!j=xfsYo_MB2zB<||mj+MVd|Xnh`ha>v``0=xKRbcLln
+z<YC~Sd9X2jX`>B+cW-mSgGTp(-gmgDuJeQdUMPenI;DnKiu1{6;N;OffZvPg<P(A{
+z;lwyXT!c}#=oZvmQskF;z$=PCA(q->mJq?2NVw8adt+02pouoz0~>?aUr;O|R$mXR
+zy68k$#YM?foZC!JK880Y__tXpL+DP|Y-th(F(QU3hm-(fMyQ&KE*P%nEps6h;@qyi
+z5W!`q;sealqLf&<JUBP(0&1R_P6N+xwn7k=M&kXW$bHt-oP_ceTkt!P+xV$kH@FiB
+zF}4yS$em6lB@=e6jx^@6iaZnW`O|3>!sbj6rX<cSlq?Z7Fk{Rj2tNOYU4^B%Q<e~f
+zDH)CS(EodK&f|~LQsNkVp~6M)PW6u2od}ayPXzDuP=LN@7AibaR(;ob0Fr-F_7}bj
+z`9Cqn3p5TvG4EGj{<>g12UHYESo`?Lfnt`PjsHvLZMk>ZZqxKXa`_N8+4Tk}fRr|4
+z37AU&rrYEc;6QO9FAzX9OA!GWE|ka8giUrK@4s-Nz7h?NxrEO@9<MBQ+)d7gU~r2q
+z0AiC}s2_w;IbF>Rqi3<=Fe<xHFZV?zuBDE%4k571*-&-0I6RCO8C}Q9A+t>-V&XH1
+zLUAe~xDa7aBy$0A>ts$6V2V*FPUeJ$THN6-nodtU3Z<sgp?S7d4RH#Z&F<Igy>};d
+z*6yBI2MWR>R%C&jPYN2Tq!e0*wk74|7k_G(o{d*Hd-?fj*~+?6NvRa}iJ3x?qJCN~
+zguJba`oPb^wu*A#Y}zW*ib8Q)MTk7cwhFyK1B^r;CbO{xX1)W@{oriy;SXsvrN)-n
+zr!qCRaFyL!%)4^87I8_<UAa=r)!gNS7n-|rFDSdY8xs-R>#`+g*It+T+PBxE6%RNx
+z9f#5f9PMzxVHjZ*ozi%Q8P>l&Vv1Hg<TJ(eqC-A2-Qq*OiKfCat8r2(*AuB@Rtp-X
+zj#;B64Z2I}1!>%JI)iS-8k0{AO6ttb<WmE6B|i4BaxY~-eik2l7=$^q&u#t!+KVkC
+Tn>-|T00000NkvXXu0mjfk-s;w
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/share1-disabled.png b/TeamScreen/src/images/share1-disabled.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..dd242042f900c250a2b41bfed1a3a5bdd60e50ce
+GIT binary patch
+literal 886
+zcmV-+1Bv{JP)<h;3K|Lk000e1NJLTq001xm001xu1^@s6R|5Hm0009$Nkl<ZXx{Cb
+zO=uHA6vxXFiu52wL_COx;Gu_}gNR5EL8N%_ARa_KNDrRGlZZF*Ao>0<i3u)ANNy>?
+zND=9&2azID#8c@xl%9%55fS}AnJwe6o1Kr%B!LV(*qxo(ng6`sn|axGA(P4cNvG3O
+zW94#rWkID-r&KC6HKr}VTY;c!nRYVo3A@%3Fb=aSfOjG84-pq{Z5YNnh#Vn$vC<0+
+zN;aE)8972TDS&sOZ2@zH<_H-Iu!_)NFmU+$PN(CPN~O52LBMO#1E^2R_J`QG5<=*3
+zA(zWt<Ll7=U6cozUj{JBln^Qwi*Y>PtJmu>uMR75#_vF~VgCt`^uR@G1J^(0>kEZK
+z9QDJfR$a`k_zCmZCjw*<a$R?cwfhB>)<hBLdoa}qG3Jlh0LPg0D*udd!t)of)HqB;
+zRT&{B-~+b;N1}*v7Mhz8LR7&26QR#>KA&HcoP)6dV}!8cD?TYW#l&Nq9?(XJz38)F
+zK%ssMTkZL<{@rdj7S<+AfHp!@fYIF%JHvN)<6*nqc7poj`F(gYp(DT;Au5eVBZhYS
+zqYfE7|B6Z82$;wgY}>>GMhLN0yeX4D;C-JE<m<g&@1IAi)#_=~|Db0OcvV+`5kg)8
+zN}IAj>gkZ9K!=z|+*mtS5kd~MT&vX<y?dk<XT20cH<y8+q&0*nSI4S9=j$+mgolJq
+z%7F29tsz7LXwS!_ukiIi<2LGl>!#D_zitH~62Jx>V!uBph<HFEbWp;WU#ua-wcD*!
+zDocV0Iv;-O;Do-nY$3$AeGd_fd>aZ%I?PlB;9cKZt(FreAQT}=S%cD91n?Wt{iu5;
+z4g|a|(Ltt)61;H77$Mak7W8GoZ!m1Pr|>N2#f5|iKEivKjS*6{AORdw3G&9MZ4@hi
+zJ&b>8gj6j|02Q=(<+JnbQ92?s@rfYhm43hPVBjGitTH=}G(z-oNa15tQdIx~I>A<a
+zpMtd6Y&x<NmO@CScn6sZLWqG4O#Ghfy4n->^S}v0ssdC!5M}X2NL7GN5RXH^%zD5$
+z2E-j|j*zB+$Pi+=ldV6?9!8E3e?5_})20Yb(xO6WqBhe4=wF5Y0%C(>gIg0882|tP
+M07*qoM6N<$g7bKg$^ZZW
+
+literal 0
+HcmV?d00001
+
+diff --git a/TeamScreen/src/images/share1-enabled.png b/TeamScreen/src/images/share1-enabled.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..00f73bfbe7f2a487d96ee5609ed602f5898cd2e4
+GIT binary patch
+literal 968
+zcmV;(12_DMP)<h;3K|Lk000e1NJLTq001xm001xu1^@s6R|5Hm000AzNkl<ZXx{Cb
+zO=uHA6vvY_>33_@S_Gv+iO_>b2}MLif=KDXgY+QcK|FYpo-|)=6JiO)Z+h@h@Zi;h
+zND=YmL8OQj@l<;8Qc5nyTF{!0X6k=7*><|!WOrsZlL&qA$Yip!Gyi$NH#6D9qeV(v
+z-Y{tz?@s22JUm7ldG0ljcO^sxgty9GwOsL<WheKkT^18y+{8^+Du4}Rn5-f%UaN5Q
+zz3e(d^u}B_kgx;MQrdNd{!al+2$c)iM`#}*NdYPmy7=<D#=bxGY)$J-6b3~d0-l>A
+z&^c8IIc?ts=R&9_nLFW+Z=PrCaQz!MH?lqD8m^C>2ch=K;-EJ|7W>n`eMTKZe%NY5
+zQsKJ=IEX-ZA~%4YdJCZsv-NEg5EdpYuFbkpW?wDJI|3Xcbn@Y^4v&64DFUSn7SUO5
+zYJ~KpkC05|%#>}ND4u3Nqc~|1lEO7Jb#W7_+z3^Y_8l_=8MBCbnm#regs6f4ySqb4
+zvMnZ@>MB4Mq4vqbkZ11^yy%Z@jw_9TC_?2Mk<V5Mhqm*bQ~6_d?T2QwKD%pd1&AU<
+z%@^CeR%2yYLo{v&o~~)t+WTXr8(4aSLIPwFqIP^{-G^0Ssn#ZgD1AkOU#=3tdGzyM
+zDgrVHQA6U6dTbvE=o9h@LPpNaW%P*j-p}=*{xAIuQ8*_oKn5Yhup+&3`lTMTzU+&Y
+z#v%L;)7J;32pvst^d6bsXffV*C-QyUM+gx|--u2~8A9}|j#*E#b*(fRbtJ@&4Crq`
+z8AAG(4XpXV;4E8@Rp%<|OQOeVv>#D|kS?Gcx)mJW`b{Ek>LNsr#S!vF8A8U)q0@zf
+zsa%Ii1oj7#7r_Z_uP8!@y_UQ^l-fyZYAx|%h;C-Q0x%)p0#ANwwgT)BqDR(h$5|~(
+z=FH(oQb)}l;k*=}8yPQ3*x|>d5#lZDPZlh!Z~9N0FIsxEofkIu!Qei&#*4$!2=RI~
+z0fu2vK`)I)^$l(T{9m%;-!VeGZYO{mu9>x1c@{D7Q6~d$2ttMpzgX2U*cCQeovb*H
+z5$fW37&TQ0@gju%B3PO6B@BEl@c4)3bij@f;xS_*<3R{Vjayh<t`9s|7aq7}1Pp|@
+z1#lwdrdcAyEkGcN>mooZ0vtKux&Y}M*hk1E0d65g&rYg-mZd)dyN*y@%TAt7%OccB
+qcLkwFI=2A&SC~fs9fx)LSD}9ljhtG_I*Jnj0000<MNUMnLSTYaYOuKg
+
+literal 0
+HcmV?d00001
+
+-- 
+2.39.5 (Apple Git-154)
+

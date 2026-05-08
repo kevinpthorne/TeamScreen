@@ -1,0 +1,27 @@
+From c59cde690216bbf84b97da9cf8e4a404b29129be Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 13 Apr 2014 15:48:26 -0600
+Subject: [PATCH 034/101] Added null check to fix null pointer on updating
+ window info
+
+---
+ .../TeamScreen/Net/jrc/DynamicJRCServerApplication.java        | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+index f9f552d..14210d7 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+@@ -62,7 +62,8 @@ public class DynamicJRCServerApplication extends Thread {
+ 					while(threadRunning) {
+ 						try {
+ 							window = WindowUtil.updateWindow(window);
+-							screenRecorder.updateWindow(window);
++							if(screenRecorder != null)
++								screenRecorder.updateWindow(window);
+ 						} catch (WindowNotFoundException e) {
+ 							//e.printStackTrace();
+ 							break;
+-- 
+2.39.5 (Apple Git-154)
+

@@ -1,0 +1,24 @@
+From e91330d60dde8f6472702b59d05672e0965fbe28 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 6 Apr 2014 21:36:23 -0600
+Subject: [PATCH 010/101] Verbose
+
+---
+ .../com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java    | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
+index 436eabf..1b232f3 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
+@@ -59,6 +59,7 @@ public class PacketListener extends Thread{
+ 					this.interrupt();
+ 					break;
+ 				}
++				TeamScreenDaemon.logger.info("Received: " + clientPacket);
+ 				String toSend = "";
+ 				
+ 				TeamScreenDaemon.logger.info(clientPacket);
+-- 
+2.39.5 (Apple Git-154)
+

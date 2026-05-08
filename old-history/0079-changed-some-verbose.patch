@@ -1,0 +1,33 @@
+From 56b2240907f5ddd796de0a09fa013ce79bb552de Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 30 Jul 2014 10:58:10 -0600
+Subject: [PATCH 079/101] changed some verbose
+
+---
+ .../src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java   | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
+index e96dc92..d1793e9 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
+@@ -139,8 +139,6 @@ public class AutoUpdater
+ 				if(generateHandshake())
+ 				{
+ 					System.out.println("Handshake generated. Downloading...");
+-					TeamScreenDaemon.displayPopup(TeamScreenDaemon.trayIcon, "Downloading Updates...",
+-							"Updates are being downloaded", TrayIcon.MessageType.INFO);
+ 					this.downloadUpdates(amountToUpdate);
+ 					synchronized(synchronizedObject)
+ 					{
+@@ -149,6 +147,7 @@ public class AutoUpdater
+ 							synchronizedObject.wait();
+ 							TeamScreenDaemon.displayPopup(TeamScreenDaemon.trayIcon, "TeamScreen Updated!",
+ 									"TeamScreen was successfully updated", TrayIcon.MessageType.INFO);
++							TeamScreenDaemon.logger.info("Update complete.");
+ 						}
+ 						catch(InterruptedException e)
+ 						{
+-- 
+2.39.5 (Apple Git-154)
+

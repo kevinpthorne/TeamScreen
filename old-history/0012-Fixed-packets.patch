@@ -1,0 +1,30 @@
+From ef51b0ca668e57d904f6525c3656578843ec54f8 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 6 Apr 2014 21:41:29 -0600
+Subject: [PATCH 012/101] Fixed packets?
+
+---
+ .../TeamScreen/Net/Broker/TeamScreenBrokerThread.java         | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broker/TeamScreenBrokerThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broker/TeamScreenBrokerThread.java
+index b84b68b..24e7360 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broker/TeamScreenBrokerThread.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broker/TeamScreenBrokerThread.java
+@@ -41,11 +41,11 @@ public class TeamScreenBrokerThread extends Thread{
+ 			while(enabled) {
+ 				DataOutputStream outToServer = new DataOutputStream(clientSocket.getOutputStream());
+ 				BufferedReader inFromServer = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+-				outToServer.writeBytes(this.toSend);
++				outToServer.writeBytes(this.toSend + "\r\n");
+ 				TeamScreenDaemon.logger.info("Sent: " + this.toSend);
+ 				String receivedPacket = inFromServer.readLine();
+ 				TeamScreenDaemon.logger.info("Received: " + receivedPacket);
+-				String toReturn = this.master.getProcessor().onPacketReceived(receivedPacket);
++				String toReturn = this.master.getProcessor().onPacketReceived(receivedPacket)+ "\r\n";
+ 				TeamScreenDaemon.logger.info("Returned: " + toReturn);
+ 				outToServer.writeBytes(toReturn);
+ 				clientSocket.close();
+-- 
+2.39.5 (Apple Git-154)
+

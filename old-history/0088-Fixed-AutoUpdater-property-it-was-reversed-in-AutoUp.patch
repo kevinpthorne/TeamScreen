@@ -1,0 +1,99 @@
+From 35d1258e52c78a0d8ec3f0e3f1dcf58c7f01ce65 Mon Sep 17 00:00:00 2001
+From: Mitch Talmadge <mitcht@aptitekk.com>
+Date: Wed, 30 Jul 2014 19:58:56 -0600
+Subject: [PATCH 088/101] Fixed AutoUpdater property (it was reversed in
+ AutoUpdater.java and others)
+
+---
+ .../aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java | 12 ++++++------
+ .../AutoUpdater/AutoUpdaterDownloadThread.java       | 10 +++++-----
+ 2 files changed, 11 insertions(+), 11 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
+index f06920e..b2cd316 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
+@@ -54,19 +54,19 @@ public class AutoUpdater
+     private AutoUpdaterDownloadThread autoUpdaterDownloadThread;
+     private static final Object synchronizedObject = new Object();
+     private Handshake handShake;
+-    private boolean askUserToUpdate;
++    private boolean automaticallyUpdate;
+     public static Image windowIcon;
+     private static ArrayList<UpdaterListener> updateListeners = new ArrayList<UpdaterListener>();
+     
+     /**
+      * Creates a new AutoUpdater. 
+-     * @param askUserToUpdate - Display a ChangeLog (true), or skip ChangeLog and download immediately (false)
++     * @param automaticallyUpdate - Display a ChangeLog (false), or skip ChangeLog and download immediately (true)
+      * @param windowIcon - The icon file to be displayed in Task Bar.
+      */
+-    public AutoUpdater(boolean askUserToUpdate, Image windowIcon)
++    public AutoUpdater(boolean automaticallyUpdate, Image windowIcon)
+     {
+ 	deleteUpdatesFolder();
+-	this.askUserToUpdate = askUserToUpdate;
++	this.automaticallyUpdate = automaticallyUpdate;
+ 	AutoUpdater.windowIcon = windowIcon;
+ 	System.setProperty("javax.net.ssl.trustStore",getAbsDir()+"/secure/cacerts");
+ 	System.setProperty("javax.net.ssl.trustStorePassword","CpAhLLp94j");
+@@ -132,7 +132,7 @@ public class AutoUpdater
+ 	    String changeLog = this.sendPOSTGetString(
+ 		    AutoUpdater.updaterURLPrefix
+ 		    + AutoUpdater.updaterChangeLogSuffix, POSTData);
+-	    if(!askUserToUpdate || this.askUserToUpdate(changeLog, amountToUpdate))
++	    if(automaticallyUpdate || this.askUserToUpdate(changeLog, amountToUpdate))
+ 	    {
+ 		System.out.println("AutoUpdater granted permission to update. Generating Handshake...");
+ 		if(generateHandshake())
+@@ -205,7 +205,7 @@ public class AutoUpdater
+ 	logMessage("Downloading Updates...", LevelEnum.INFO);
+ 	
+ 	this.autoUpdaterDownloadThread = new AutoUpdaterDownloadThread(
+-		this.currentVersionID, amountToUpdate, this.handShake, askUserToUpdate);
++		this.currentVersionID, amountToUpdate, this.handShake, automaticallyUpdate);
+ 	this.autoUpdaterDownloadThread.start();
+     }
+     
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
+index 6bfb827..ae62c66 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
+@@ -15,21 +15,21 @@ public class AutoUpdaterDownloadThread extends Thread
+     private int amountToUpdate;
+     private Handshake handShake;
+     private File autoUpdater;
+-    private boolean showDialog;
++    private boolean automaticallyUpdate;
+     
+     public AutoUpdaterDownloadThread(int currentVersionID, int amountToUpdate,
+-	    Handshake handShake, boolean showDialog)
++	    Handshake handShake, boolean automaticallyUpdate)
+     {
+ 	this.currentVersionID = currentVersionID;
+ 	this.amountToUpdate = amountToUpdate;
+ 	this.handShake = handShake;
+-	this.showDialog = showDialog;
++	this.automaticallyUpdate = automaticallyUpdate;
+     }
+     
+     @Override
+     public void run()
+     {
+-	if(showDialog)
++	if(!automaticallyUpdate)
+ 	    URLUtils.addProgressListener(new DownloadDialog(amountToUpdate+1));
+ 	try
+ 	{
+@@ -70,7 +70,7 @@ public class AutoUpdaterDownloadThread extends Thread
+ 		}
+ 		AutoUpdater.logMessage("Could not download Version ID " + versionID
+ 			+ ".\n    (Result was: " + result + ")", LevelEnum.SEVERE);
+-		if(!showDialog)
++		if(automaticallyUpdate)
+ 		    AutoUpdater.notifyObject();
+ 		return false;
+ 	    }
+-- 
+2.39.5 (Apple Git-154)
+

@@ -1,0 +1,45 @@
+From 5906ad931f48669023bad05d7e1bde26801c1474 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 6 Apr 2014 22:17:11 -0600
+Subject: [PATCH 024/101] Debugging window screen recorder
+
+---
+ .../aptitekk/TeamScreen/Net/jrc/WindowScreenRecorder.java | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowScreenRecorder.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowScreenRecorder.java
+index c018281..f9316f3 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowScreenRecorder.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowScreenRecorder.java
+@@ -49,8 +49,10 @@ public class WindowScreenRecorder extends ScreenRecorder{
+ 
+ 	@Override
+ 	public Rectangle initialiseScreenCapture() {
++		Point topleft = new Point(this.window.getRect()[0], this.window.getRect()[1]);
++		Point bottomright = new Point(this.window.getRect()[2], this.window.getRect()[3]);
+ 		try{
+-			robot = new Robot();
++			this.robot = new Robot();
+ 		}
+ 		catch(AWTException awe)
+ 		{
+@@ -58,13 +60,15 @@ public class WindowScreenRecorder extends ScreenRecorder{
+ 			return null;
+ 		}
+ 		Rectangle windowRect = getWindowRect();
++		System.out.println("Created screen area: " + String.format("(%d,%d)-(%d,%d)",
++				topleft.x, topleft.y,bottomright.x,bottomright.y));
+ 		return windowRect;
+ 	}
+ 
+ 	@Override
+ 	public BufferedImage captureScreen(Rectangle recordArea) {
+ 		Point mousePosition = MouseInfo.getPointerInfo().getLocation();
+-		BufferedImage image = robot.createScreenCapture(recordArea);
++		BufferedImage image = this.robot.createScreenCapture(recordArea);
+ 		
+ 		Polygon pointer = new Polygon(new int[]{0,16,10,8},new int[]{0,8,10,16},4);
+ 		Polygon pointerShadow = new Polygon(new int[]{6,21,16,14},new int[]{1,9,11,17},4);
+-- 
+2.39.5 (Apple Git-154)
+

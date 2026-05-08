@@ -1,0 +1,25 @@
+From 5faf56b30256bd3ae5e37560391b508493c3c75a Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 6 Apr 2014 21:44:33 -0600
+Subject: [PATCH 014/101] More packet fixes....almost there
+
+---
+ .../com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java   | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
+index 42208e1..902b288 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Listeners/PacketListener.java
+@@ -71,7 +71,7 @@ public class PacketListener extends Thread{
+ 				}
+ 				
+ 			    if(!toSend.equals(""))
+-			    	outToClient.writeBytes(toSend);
++			    	outToClient.writeBytes(toSend +"\r\n");
+ 			    TeamScreenDaemon.logger.info("Sent: "+toSend);
+ 			} catch (SocketTimeoutException e) {
+ 				e.printStackTrace();
+-- 
+2.39.5 (Apple Git-154)
+

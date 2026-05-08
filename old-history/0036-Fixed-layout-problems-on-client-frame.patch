@@ -1,0 +1,42 @@
+From 098b519b11460cf830d391011c6ff997415166af Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 13 Apr 2014 16:00:23 -0600
+Subject: [PATCH 036/101] Fixed layout problems on client frame
+
+---
+ .../aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java  | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
+index 163796b..687de62 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
+@@ -2,11 +2,12 @@ package com.aptitekk.TeamScreen.Net.jrc;
+ 
+ import java.awt.Component;
+ import java.awt.Dimension;
++import java.awt.GridBagConstraints;
++import java.awt.GridBagLayout;
+ import java.awt.Image;
+ import java.awt.event.WindowAdapter;
+ import java.awt.event.WindowEvent;
+ 
+-import javax.swing.BoxLayout;
+ import javax.swing.ImageIcon;
+ import javax.swing.JFrame;
+ import javax.swing.JLabel;
+@@ -42,9 +43,9 @@ public class JRCClientWindowFrame extends JFrame implements RemoteControlClient
+ 		this.viewIcon = new ImageIcon( ImageFactory.loadImage("jar://images/teamscreen.png") );
+ 		
+ 		this.picLabel = new JLabel(this.viewIcon);
+-		add(this.picLabel);
++		add(this.picLabel, new GridBagConstraints());
+ 		
+-		this.setLayout(new BoxLayout(this, BoxLayout.PAGE_AXIS));
++		this.setLayout(new GridBagLayout());
+ 		
+ 		this.setSize(this.picLabel.getSize().width, this.picLabel.getSize().height+60);
+ 		this.setVisible(true);
+-- 
+2.39.5 (Apple Git-154)
+

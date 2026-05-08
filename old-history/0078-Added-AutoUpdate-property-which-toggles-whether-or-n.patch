@@ -1,0 +1,904 @@
+From 2564af6e2a68476d3e660a3b5edc7e407ee13c28 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 30 Jul 2014 10:32:27 -0600
+Subject: [PATCH 078/101] Added AutoUpdate property which toggles whether or
+ not the changelog and the download dialog appear.
+
+---
+ .../TeamScreen/AutoUpdater/AutoUpdater.java   | 539 +++++++++---------
+ .../AutoUpdaterDownloadThread.java            | 188 +++---
+ .../TeamScreen/PropertiesHandler.java         |   3 +-
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java |  29 +-
+ 4 files changed, 391 insertions(+), 368 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
+index 8ddcfc6..e96dc92 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
+@@ -1,6 +1,7 @@
+ package com.aptitekk.TeamScreen.AutoUpdater;
+ 
+ import java.awt.Image;
++import java.awt.TrayIcon;
+ import java.io.File;
+ import java.io.FileInputStream;
+ import java.io.FileNotFoundException;
+@@ -15,6 +16,8 @@ import java.util.ArrayList;
+ 
+ import org.apache.commons.io.FileUtils;
+ 
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++
+ /**
+  * AutoUpdater portion of TeamScreen
+  * 
+@@ -23,309 +26,311 @@ import org.apache.commons.io.FileUtils;
+  */
+ public class AutoUpdater
+ {
+-    /** Static variables that connection to the server requires.
+-     */
+-    public static final String applicationName = "TeamScreen";
+-    
+-    /** Static variables that connection to the server requires.
+-     */
+-    public static final String updaterURLPrefix = "https://AptiTekk.com/AutoUpdater/V1/";
+-    /** Static variables that connection to the server requires.
+-     * 
+-     */
+-    public static final String updaterChangeLogSuffix = "ChangeLogFactory.php";
+-    /**
+-     * Static variables that connection to the server requires.
+-     */
+-    public static final String updaterFileTransferSuffix = "FileTransfer.php";
+-    /**
+-     * Static variables that connection to the server requires.
+-     */
+-    public static final String updaterVersionFinderSuffix = "VersionFinder.php";
+-    /**
+-     * Static variables that connection to the server requires.
+-     */
+-    public static final String updaterHandshakeSuffix = "Handshake.php";
+-    
+-    private int currentVersionID;
+-    private String currentVersionName = "0.0_0.0";
+-    private AutoUpdaterDownloadThread autoUpdaterDownloadThread;
+-    private static final Object synchronizedObject = new Object();
+-    private Handshake handShake;
+-    private boolean askUserToUpdate;
+-    public static Image windowIcon;
+-    private static ArrayList<UpdaterListener> updateListeners = new ArrayList<UpdaterListener>();
+-        
+-    /**
+-     * Creates a new AutoUpdater. 
+-     * @param askUserToUpdate - Display a ChangeLog (true), or skip ChangeLog and download immediately (false)
+-     * @param windowIcon - The icon file to be displayed in Task Bar.
+-     */
+-    public AutoUpdater(boolean askUserToUpdate, Image windowIcon)
+-    {
+-	deleteUpdatesFolder();
+-	this.askUserToUpdate = askUserToUpdate;
+-	AutoUpdater.windowIcon = windowIcon;
+-	System.setProperty("javax.net.ssl.trustStore",getAbsDir()+"/secure/cacerts");
+-	System.setProperty("javax.net.ssl.trustStorePassword","CpAhLLp94j");
+-	this.loadProperties();
+-    }
+-    
+-    private void loadProperties()
+-    {
+-	File propFile = new File(getAbsDir()+"/updates.properties");
+-	try
+-	{
+-	    EncryptedProperties prop = new EncryptedProperties("<*d~Pq(E[F8u~m");
+-	    if(!propFile.exists())
+-	    {
+-		FileOutputStream out = new FileOutputStream(propFile);
+-		prop.setProperty("currentVersionID", "0");
+-		prop.setProperty("currentVersionName", "0.0_0.0");
+-		this.currentVersionID = 0;
+-		this.currentVersionName = "0.0_0.0";
+-		prop.store(out, "Auto Updater Properties File -- DO NOT EDIT.");
+-		out.close();
+-	    }
+-	    else 
+-	    {
+-		FileInputStream in = new FileInputStream(propFile);
+-		prop.load(in);
+-		this.currentVersionID = Integer.parseInt(prop.getProperty("currentVersionID"));
+-		this.currentVersionName = prop.getProperty("currentVersionName");
+-		in.close();
+-	    }
+-	}
+-	catch(FileNotFoundException e)
+-	{
+-	    e.printStackTrace();
+-	}
+-	catch(Exception e)
++	/** Static variables that connection to the server requires.
++	 */
++	public static final String applicationName = "TeamScreen";
++
++	/** Static variables that connection to the server requires.
++	 */
++	public static final String updaterURLPrefix = "https://AptiTekk.com/AutoUpdater/V1/";
++	/** Static variables that connection to the server requires.
++	 * 
++	 */
++	public static final String updaterChangeLogSuffix = "ChangeLogFactory.php";
++	/**
++	 * Static variables that connection to the server requires.
++	 */
++	public static final String updaterFileTransferSuffix = "FileTransfer.php";
++	/**
++	 * Static variables that connection to the server requires.
++	 */
++	public static final String updaterVersionFinderSuffix = "VersionFinder.php";
++	/**
++	 * Static variables that connection to the server requires.
++	 */
++	public static final String updaterHandshakeSuffix = "Handshake.php";
++
++	private int currentVersionID;
++	private String currentVersionName = "0.0_0.0";
++	private AutoUpdaterDownloadThread autoUpdaterDownloadThread;
++	private static final Object synchronizedObject = new Object();
++	private Handshake handShake;
++	private boolean askUserToUpdate;
++	public static Image windowIcon;
++	private static ArrayList<UpdaterListener> updateListeners = new ArrayList<UpdaterListener>();
++
++	/**
++	 * Creates a new AutoUpdater. 
++	 * @param askUserToUpdate - Display a ChangeLog (true), or skip ChangeLog and download immediately (false)
++	 * @param windowIcon - The icon file to be displayed in Task Bar.
++	 */
++	public AutoUpdater(boolean askUserToUpdate, Image windowIcon)
+ 	{
+-	    e.printStackTrace();
++		deleteUpdatesFolder();
++		this.askUserToUpdate = askUserToUpdate;
++		AutoUpdater.windowIcon = windowIcon;
++		System.setProperty("javax.net.ssl.trustStore",getAbsDir()+"/secure/cacerts");
++		System.setProperty("javax.net.ssl.trustStorePassword","CpAhLLp94j");
++		this.loadProperties();
+ 	}
+-    }
+-    
+-    /**
+-     * Checks for updates on the server
+-     */
+-    public void checkForUpdates()
+-    {
+-	System.out.println("Checking for Updates...");
+-	
+-	String POSTData = "currentVersionID=" + currentVersionID + "&modType="
+-		+ AutoUpdater.applicationName;
+-	
+-	String result = this.sendPOSTGetString(AutoUpdater.updaterURLPrefix
+-		+ AutoUpdater.updaterVersionFinderSuffix, POSTData);
+-	if(result == null || result.startsWith("ERROR"))
++
++	private void loadProperties()
+ 	{
+-	    System.out.println("Error message received: " + result);
+-	    return;
++		File propFile = new File(getAbsDir()+"/updates.properties");
++		try
++		{
++			EncryptedProperties prop = new EncryptedProperties("<*d~Pq(E[F8u~m");
++			if(!propFile.exists())
++			{
++				FileOutputStream out = new FileOutputStream(propFile);
++				prop.setProperty("currentVersionID", "0");
++				prop.setProperty("currentVersionName", "0.0_0.0");
++				this.currentVersionID = 0;
++				this.currentVersionName = "0.0_0.0";
++				prop.store(out, "Auto Updater Properties File -- DO NOT EDIT.");
++				out.close();
++			}
++			else 
++			{
++				FileInputStream in = new FileInputStream(propFile);
++				prop.load(in);
++				this.currentVersionID = Integer.parseInt(prop.getProperty("currentVersionID"));
++				this.currentVersionName = prop.getProperty("currentVersionName");
++				in.close();
++			}
++		}
++		catch(FileNotFoundException e)
++		{
++			e.printStackTrace();
++		}
++		catch(Exception e)
++		{
++			e.printStackTrace();
++		}
+ 	}
+-	else if(result.startsWith("SUCCESS"))
++
++	/**
++	 * Checks for updates on the server
++	 */
++	public void checkForUpdates()
+ 	{
+-	    int amountToUpdate = Integer.parseInt(result.split(":")[1]);
+-	    System.out.println("Amount to Update: " + amountToUpdate);
+-	    String changeLog = this.sendPOSTGetString(
+-		    AutoUpdater.updaterURLPrefix
+-		    + AutoUpdater.updaterChangeLogSuffix, POSTData);
+-	    if(!askUserToUpdate || this.askUserToUpdate(changeLog, amountToUpdate))
+-	    {
+-		System.out.println("User said Yes. Generating Handshake...");
+-		if(generateHandshake())
++		TeamScreenDaemon.logger.info("Checking for Updates...");
++
++		String POSTData = "currentVersionID=" + currentVersionID + "&modType="
++				+ AutoUpdater.applicationName;
++
++		String result = this.sendPOSTGetString(AutoUpdater.updaterURLPrefix
++				+ AutoUpdater.updaterVersionFinderSuffix, POSTData);
++		if(result == null || result.startsWith("ERROR"))
+ 		{
+-		    System.out.println("Handshake generated. Downloading...");
+-		    this.downloadUpdates(amountToUpdate);
+-		    synchronized(synchronizedObject)
+-		    {
+-			try
++			System.out.println("Error message received: " + result);
++			return;
++		}
++		else if(result.startsWith("SUCCESS"))
++		{
++			int amountToUpdate = Integer.parseInt(result.split(":")[1]);
++			System.out.println("Amount to Update: " + amountToUpdate);
++			String changeLog = this.sendPOSTGetString(
++					AutoUpdater.updaterURLPrefix
++					+ AutoUpdater.updaterChangeLogSuffix, POSTData);
++			if(!askUserToUpdate || this.askUserToUpdate(changeLog, amountToUpdate))
+ 			{
+-			    synchronizedObject.wait();
++				System.out.println("AutoUpdater granted permission to update. Generating Handshake...");
++				if(generateHandshake())
++				{
++					System.out.println("Handshake generated. Downloading...");
++					TeamScreenDaemon.displayPopup(TeamScreenDaemon.trayIcon, "Downloading Updates...",
++							"Updates are being downloaded", TrayIcon.MessageType.INFO);
++					this.downloadUpdates(amountToUpdate);
++					synchronized(synchronizedObject)
++					{
++						try
++						{
++							synchronizedObject.wait();
++							TeamScreenDaemon.displayPopup(TeamScreenDaemon.trayIcon, "TeamScreen Updated!",
++									"TeamScreen was successfully updated", TrayIcon.MessageType.INFO);
++						}
++						catch(InterruptedException e)
++						{
++						}
++					}
++				}
++				else
++				{
++					return;
++				}
+ 			}
+-			catch(InterruptedException e)
++			else
+ 			{
++				System.out.println("User said No. Continuing...");
+ 			}
+-		    }
+ 		}
+ 		else
+ 		{
+-		    return;
++			TeamScreenDaemon.logger.severe("Could not connect to AutoUpdater. Aborting.\n    (Result was: "
++					+ result + ")");
+ 		}
+-	    }
+-	    else
+-	    {
+-		System.out.println("User said No. Continuing...");
+-	    }
+-	}
+-	else
+-	{
+-	    System.out
+-	    .println("Could not connect to AutoUpdater. Aborting.\n    (Result was: "
+-		    + result + ")");
+ 	}
+-    }
+-    
+-    private boolean generateHandshake()
+-    {
+-	String POSTData = "currentVersionID=" + currentVersionID + "&modType="
+-		+ AutoUpdater.applicationName;
+-	String data = this.sendPOSTGetString(AutoUpdater.updaterURLPrefix
+-		+ AutoUpdater.updaterHandshakeSuffix, POSTData);
+-	if(data != null && !data.isEmpty())
++
++	private boolean generateHandshake()
+ 	{
+-	    if(data.contains("SUCCESS"))
+-	    {
+-		String[] split = data.split(":");
+-		if(split.length == 3)
++		String POSTData = "currentVersionID=" + currentVersionID + "&modType="
++				+ AutoUpdater.applicationName;
++		String data = this.sendPOSTGetString(AutoUpdater.updaterURLPrefix
++				+ AutoUpdater.updaterHandshakeSuffix, POSTData);
++		if(data != null && !data.isEmpty())
+ 		{
+-		    this.handShake = new Handshake(split[1], split[2]);
+-		    return true;
++			if(data.contains("SUCCESS"))
++			{
++				String[] split = data.split(":");
++				if(split.length == 3)
++				{
++					this.handShake = new Handshake(split[1], split[2]);
++					return true;
++				}
++			}
++			else
++			{
++				TeamScreenDaemon.logger.severe("Cannot generate Handshake.\n    (Result was: "
++						+ data + ")");
++			}
+ 		}
+-	    }
+-	    else
+-	    {
+-		System.out
+-		.println("Cannot generate Handshake.\n    (Result was: "
+-			+ data + ")");
+-	    }
++		return false;
+ 	}
+-	return false;
+-    }
+-    
+-    private boolean askUserToUpdate(String changeLog, int amountToUpdate)
+-    {
+-	System.out.println("Asking user to Update...");
+-	return new ChangeLogDialog(changeLog, amountToUpdate).askUserToUpdate();
+-    }
+-    
+-    private void downloadUpdates(int amountToUpdate)
+-    {
+-	new File("updates/").mkdir();
+-	System.out.println("Downloading Updates...");
+-	
+-	this.autoUpdaterDownloadThread = new AutoUpdaterDownloadThread(
+-		this.currentVersionID, amountToUpdate, this.handShake);
+-	this.autoUpdaterDownloadThread.start();
+-    }
+-    
+-    private String sendPOSTGetString(String URLString, String POSTData)
+-    {
+-	URLConnection connection;
+-	URL url;
+-	try
++
++	private boolean askUserToUpdate(String changeLog, int amountToUpdate)
+ 	{
+-	    url = new URL(URLString);
+-	    
+-	    connection = url.openConnection();
+-	    connection.setUseCaches(false);
+-	    connection.setConnectTimeout(5000);
+-	    connection.setDoOutput(true);
+-	    OutputStreamWriter outputStream = new OutputStreamWriter(
+-		    connection.getOutputStream());
+-	    
+-	    outputStream.write(POSTData);
+-	    outputStream.flush();
+-	    
+-	    return URLUtils.getStringFromConnection(connection);
++		System.out.println("Asking user to Update...");
++		return new ChangeLogDialog(changeLog, amountToUpdate).askUserToUpdate();
+ 	}
+-	catch(MalformedURLException e)
++
++	private void downloadUpdates(int amountToUpdate)
+ 	{
+-	    e.printStackTrace();
++		new File("updates/").mkdir();
++		TeamScreenDaemon.logger.info("Downloading Updates...");
++
++		this.autoUpdaterDownloadThread = new AutoUpdaterDownloadThread(
++				this.currentVersionID, amountToUpdate, this.handShake, askUserToUpdate);
++		this.autoUpdaterDownloadThread.start();
+ 	}
+-	catch(IOException e)
++
++	private String sendPOSTGetString(String URLString, String POSTData)
+ 	{
+-	    e.printStackTrace();
++		URLConnection connection;
++		URL url;
++		try
++		{
++			url = new URL(URLString);
++
++			connection = url.openConnection();
++			connection.setUseCaches(false);
++			connection.setConnectTimeout(5000);
++			connection.setDoOutput(true);
++			OutputStreamWriter outputStream = new OutputStreamWriter(
++					connection.getOutputStream());
++
++			outputStream.write(POSTData);
++			outputStream.flush();
++
++			return URLUtils.getStringFromConnection(connection);
++		}
++		catch(MalformedURLException e)
++		{
++			e.printStackTrace();
++		}
++		catch(IOException e)
++		{
++			e.printStackTrace();
++		}
++		return "ERROR:noConnection";
++	}
++
++	/**
++	 * 
++	 */
++	public static void deleteUpdatesFolder()
++	{
++		File updatesFolder = new File(getAbsDir()+"/updates");
++		if(updatesFolder.exists())
++		{
++			try
++			{
++				FileUtils.deleteDirectory(updatesFolder);
++			}
++			catch(IOException e)
++			{
++				e.printStackTrace();
++			}
++		}
++		File autoUpdater = new File(getAbsDir() + "/AutoUpdater.jar");
++		if(autoUpdater.exists())
++			autoUpdater.delete();
+ 	}
+-	return "ERROR:noConnection";
+-    }
+-    
+-    /**
+-     * 
+-     */
+-    public static void deleteUpdatesFolder()
+-    {
+-	File updatesFolder = new File(getAbsDir()+"/updates");
+-	if(updatesFolder.exists())
++
++	/**
++	 * @return Current version
++	 */
++	public String getCurrentVersionName()
+ 	{
+-	    try
+-	    {
+-		FileUtils.deleteDirectory(updatesFolder);
+-	    }
+-	    catch(IOException e)
+-	    {
+-		e.printStackTrace();
+-	    }
++		return this.currentVersionName;
+ 	}
+-	File autoUpdater = new File(getAbsDir() + "/AutoUpdater.jar");
+-	if(autoUpdater.exists())
+-	    autoUpdater.delete();
+-    }
+-    
+-    /**
+-     * @return Current version
+-     */
+-    public String getCurrentVersionName()
+-    {
+-	return this.currentVersionName;
+-    }
+-    
+-    /**
+-     * @return Location of the jar
+-     */
+-    public static String getAbsDir()
+-    {
+-	try
++
++	/**
++	 * @return Location of the jar
++	 */
++	public static String getAbsDir()
+ 	{
+-	    File abs = new File(AutoUpdater.class.getProtectionDomain()
+-		    .getCodeSource().getLocation().toURI().getPath())
+-	    .getParentFile().getAbsoluteFile();
+-	    return abs.getAbsolutePath();
++		try
++		{
++			File abs = new File(AutoUpdater.class.getProtectionDomain()
++					.getCodeSource().getLocation().toURI().getPath())
++			.getParentFile().getAbsoluteFile();
++			return abs.getAbsolutePath();
++		}
++		catch(URISyntaxException e)
++		{
++			return null;
++		}
+ 	}
+-	catch(URISyntaxException e)
++
++	/**
++	 * @param path
++	 * @return Internal URL for files inside the jar
++	 */
++	public static URL getResourceByPath(String path)
+ 	{
+-	    return null;
++		return AutoUpdater.class.getResource(path);
+ 	}
+-    }
+ 
+-    /**
+-     * @param path
+-     * @return Internal URL for files inside the jar
+-     */
+-    public static URL getResourceByPath(String path)
+-    {
+-	return AutoUpdater.class.getResource(path);
+-    }
+-    
+-    static void shutDownProgram()
+-    {
+-	for(UpdaterListener listener : updateListeners)
++	static void shutDownProgram()
+ 	{
+-	    listener.shutDownProgram();
++		for(UpdaterListener listener : updateListeners)
++		{
++			listener.shutDownProgram();
++		}
+ 	}
+-    }
+-    
+-    /**
+-     * Adds an UpdaterListener (For shutting down, etc)
+-     * @param listener - The UpdaterListener.
+-     */
+-    public void addUpdaterListener(UpdaterListener listener)
+-    {
+-	if(listener != null)
++
++	/**
++	 * Adds an UpdaterListener (For shutting down, etc)
++	 * @param listener - The UpdaterListener.
++	 */
++	public void addUpdaterListener(UpdaterListener listener)
+ 	{
+-	    if(listener instanceof UpdaterListener)
+-	    {
+-		this.updateListeners.add(listener);
+-	    }
++		if(listener != null)
++		{
++			if(listener instanceof UpdaterListener)
++			{
++				this.updateListeners.add(listener);
++			}
++		}
+ 	}
+-    }
+-    
+-    static void notifyObject()
+-    {
+-	synchronized(synchronizedObject)
++
++	static void notifyObject()
+ 	{
+-	    synchronizedObject.notify();
++		synchronized(synchronizedObject)
++		{
++			synchronizedObject.notify();
++		}
+ 	}
+-    }
+-    
++
+ }
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
+index a8ad251..4f6cc8a 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
+@@ -1,110 +1,122 @@
+ package com.aptitekk.TeamScreen.AutoUpdater;
+ 
++import java.awt.TrayIcon;
+ import java.io.File;
+ import java.io.IOException;
+ import java.io.OutputStreamWriter;
+ import java.net.URL;
+ import java.net.URLConnection;
+ 
++import com.aptitekk.TeamScreen.TeamScreenDaemon;
++
+ public class AutoUpdaterDownloadThread extends Thread
+ {
+-    
+-    private int currentVersionID;
+-    private int amountToUpdate;
+-    private Handshake handShake;
+-    private File autoUpdater;
+-    
+-    public AutoUpdaterDownloadThread(int currentVersionID, int amountToUpdate,
+-	    Handshake handShake)
+-    {
+-	this.currentVersionID = currentVersionID;
+-	this.amountToUpdate = amountToUpdate;
+-	this.handShake = handShake;
+-    }
+-    
+-    @Override
+-    public void run()
+-    {
+-	URLUtils.addProgressListener(new DownloadDialog(amountToUpdate+1));
+-	try
+-	{
+-	    Thread.sleep(500);
+-	}
+-	catch(InterruptedException e)
++
++	private int currentVersionID;
++	private int amountToUpdate;
++	private Handshake handShake;
++	private File autoUpdater;
++	private boolean showDialog;
++
++	public AutoUpdaterDownloadThread(int currentVersionID, int amountToUpdate,
++			Handshake handShake, boolean showDialog)
+ 	{
++		this.currentVersionID = currentVersionID;
++		this.amountToUpdate = amountToUpdate;
++		this.handShake = handShake;
++		this.showDialog = showDialog;
+ 	}
+-	if(downloadUpdate(-1))
++
++	@Override
++	public void run()
+ 	{
+-	    for(int i = 1; i <= amountToUpdate; i++)
+-	    {
+-		if(!downloadUpdate(currentVersionID + i))
+-		    break;
+-	    }
++		if(showDialog)
++			URLUtils.addProgressListener(new DownloadDialog(amountToUpdate+1));
++		try
++		{
++			Thread.sleep(500);
++		}
++		catch(InterruptedException e)
++		{
++		}
++		if(downloadUpdate(-1))
++		{
++			for(int i = 1; i <= amountToUpdate; i++)
++			{
++				if(!downloadUpdate(currentVersionID + i))
++					break;
++			}
++		}
+ 	}
+-    }
+-    
+-    private boolean downloadUpdate(int versionID)
+-    {
+-	String POSTData = "versionID=" + versionID + "&modType="
+-		+ AutoUpdater.applicationName + "&handShake="
+-		+ this.handShake.getHandShakeResult();
+-	
+-	URLConnection connection = this.sendPOSTGetConnection(
+-		AutoUpdater.updaterURLPrefix
+-		+ AutoUpdater.updaterFileTransferSuffix, POSTData);
+-	
+-	if(connection != null)
++
++	private boolean downloadUpdate(int versionID)
+ 	{
+-	    String contentDisposition = connection.getHeaderField("Content-Disposition");
+-	    if(contentDisposition == null)
+-	    {
+-		String result = URLUtils.getStringFromConnection(connection);
+-		for(DLProgressListener listener : URLUtils.getProgressListenerList())
++		String POSTData = "versionID=" + versionID + "&modType="
++				+ AutoUpdater.applicationName + "&handShake="
++				+ this.handShake.getHandShakeResult();
++
++		URLConnection connection = this.sendPOSTGetConnection(
++				AutoUpdater.updaterURLPrefix
++				+ AutoUpdater.updaterFileTransferSuffix, POSTData);
++
++		if(connection != null)
+ 		{
+-		    listener.downloadFailed("Server-Sided Error.");
++			String contentDisposition = connection.getHeaderField("Content-Disposition");
++			if(contentDisposition == null)
++			{
++				String result = URLUtils.getStringFromConnection(connection);
++				for(DLProgressListener listener : URLUtils.getProgressListenerList())
++				{
++					listener.downloadFailed("Server-Sided Error.");
++				}
++				TeamScreenDaemon.logger.severe("Could not download Version ID " + versionID
++						+ ".\n    (Result was: " + result + ")");
++				TeamScreenDaemon.displayPopup(TeamScreenDaemon.trayIcon, "Error downloading updates!",
++						"Updates could not be downloaded\n"+
++								"Could not download Version ID " + versionID
++								+ ".\n    (Result was: " + result + ")", TrayIcon.MessageType.ERROR);
++				if(!this.showDialog)
++					AutoUpdater.notifyObject();
++				return false;
++			}
++			String filename = contentDisposition.substring(contentDisposition.indexOf("\"")+1, contentDisposition.lastIndexOf("\""));
++
++			File update = URLUtils.getFileFromConnection(connection,
++					AutoUpdater.getAbsDir() + (versionID == -1 ? "/" : "/updates/") + filename);
++			if(update == null)
++				return false;
++			return true;
+ 		}
+-		System.out.println("Could not download Version ID " + versionID
+-			+ ".\n    (Result was: " + result + ")");
+-		return false;
+-	    }
+-	    String filename = contentDisposition.substring(contentDisposition.indexOf("\"")+1, contentDisposition.lastIndexOf("\""));
+-	    
+-	    File update = URLUtils.getFileFromConnection(connection,
+-		    AutoUpdater.getAbsDir() + (versionID == -1 ? "/" : "/updates/") + filename);
+-	    if(update == null)
+ 		return false;
+-	    return true;
+-	}
+-	return false;
+-    }
+-    
+-    private URLConnection sendPOSTGetConnection(String URLString,
+-	    String POSTData)
+-    {
+-	URLConnection connection;
+-	try
+-	{
+-	    URL url = new URL(URLString);
+-	    connection = url.openConnection();
+-	    connection.setConnectTimeout(5000);
+-	    connection.setDoOutput(true);
+-	    connection.setDoInput(true);
+-	    connection.setRequestProperty("User-Agent", "Mozilla/5.0");
+-	    
+-	    OutputStreamWriter outputStream = new OutputStreamWriter(
+-		    connection.getOutputStream());
+-	    
+-	    outputStream.write(POSTData);
+-	    outputStream.flush();
+-	    
+-	    return connection;
+-	    
+ 	}
+-	catch(IOException e)
++
++	private URLConnection sendPOSTGetConnection(String URLString,
++			String POSTData)
+ 	{
+-	    e.printStackTrace();
+-	    return null;
++		URLConnection connection;
++		try
++		{
++			URL url = new URL(URLString);
++			connection = url.openConnection();
++			connection.setConnectTimeout(5000);
++			connection.setDoOutput(true);
++			connection.setDoInput(true);
++			connection.setRequestProperty("User-Agent", "Mozilla/5.0");
++
++			OutputStreamWriter outputStream = new OutputStreamWriter(
++					connection.getOutputStream());
++
++			outputStream.write(POSTData);
++			outputStream.flush();
++
++			return connection;
++
++		}
++		catch(IOException e)
++		{
++			e.printStackTrace();
++			return null;
++		}
+ 	}
+-    }
+-    
++
+ }
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java
+index 8a38d06..56e2348 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/PropertiesHandler.java
+@@ -19,7 +19,7 @@ public class PropertiesHandler {
+ 	
+ 	public static String properties_filepath = FolderManager.getAbsDir()+"/TeamScreen.properties";
+ 	
+-	private static final String[] properties_fields = {"Name", "Slot", "KeyStroke", "KeyStrokeEnd", "Log"};
++	private static final String[] properties_fields = {"Name", "Slot", "KeyStroke", "KeyStrokeEnd", "Log", "AutoUpdate", "NotificationLevel"};
+ 	
+ 	private static String prop_comments = "This is the default properties file.\n"+
+ 									"DO NOT EDIT (Unless you are instructed to do so.)\n"+
+@@ -105,6 +105,7 @@ public class PropertiesHandler {
+ 		prop.setProperty("KeyStrokeEnd","1");
+ 		prop.setProperty("Log", "false");
+ 		prop.setProperty("NotificationLevel", "warning");
++		prop.setProperty("AutoUpdate", "true");
+ 		prop.setProperty("LNeighbor", "");
+ 		prop.setProperty("RNeighbor", "");
+ 		prop.setProperty("TNeighbor", "");
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index b80aa2b..22f1cb5 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -142,7 +142,8 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 
+ 			displayPopup(trayIcon, "Checking For Updates...", "TeamScreen is now checking for updates...", TrayIcon.MessageType.INFO);
+ 
+-			AutoUpdater updater = new AutoUpdater(true, FolderManager.createImage("/images/TeamScreen-64px.png", "tray icon"));
++			AutoUpdater updater = new AutoUpdater(Boolean.valueOf(properties.getConfig().getProperty("AutoUpdate")), 
++					FolderManager.createImage("/images/TeamScreen-64px.png", "tray icon"));
+ 			updater.addUpdaterListener(this);
+ 			updater.checkForUpdates();
+ 
+@@ -201,22 +202,26 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 	public static void displayPopup(TrayIcon tray, String title, String text, TrayIcon.MessageType type) {
+ 		try {
+ 			if(properties.getConfig().containsKey("NotificationLevel")) {
+-				if(properties.getConfig().getProperty("NotificationLevel").equalsIgnoreCase("warning")) {
+-					if(type.equals(TrayIcon.MessageType.WARNING)) {
++				TrayIcon.MessageType notificationLevel = TrayIcon.MessageType.valueOf(properties.getConfig().getProperty("NotificationLevel").toUpperCase());
++				switch(notificationLevel) {
++				case WARNING:
++					if(type.equals(TrayIcon.MessageType.WARNING) || type.equals(TrayIcon.MessageType.ERROR))
+ 						tray.displayMessage(title, text, type);
+-					}
+-				} else if(properties.getConfig().getProperty("NotificationLevel").equalsIgnoreCase("info")) {
+-					if(type.equals(TrayIcon.MessageType.INFO) || type.equals(TrayIcon.MessageType.WARNING) || type.equals(TrayIcon.MessageType.ERROR)) {
+-						tray.displayMessage(title, text, type);
+-					}
+-				} else if(properties.getConfig().getProperty("NotificationLevel").equalsIgnoreCase("error")) {
+-					if(type.equals(TrayIcon.MessageType.ERROR) || type.equals(TrayIcon.MessageType.WARNING)) {
++					break;
++				case INFO:
++					tray.displayMessage(title, text, type);
++					break;
++				case ERROR:
++					if(type.equals(TrayIcon.MessageType.ERROR))
+ 						tray.displayMessage(title, text, type);
+-					}
++					break;
++				default:
++					tray.displayMessage(title, text, type);
++					break;
+ 				}
+ 			}
+ 			else {
+-				System.err.println("No NotificationLevel found");
++				System.err.println("No NotificationLevel found, falling back to default");
+ 				properties.getConfig().setProperty("NotificationLevel", "info");
+ 				properties.saveConfig();
+ 				tray.displayMessage(title, text, type);
+-- 
+2.39.5 (Apple Git-154)
+

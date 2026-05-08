@@ -1,0 +1,224 @@
+From 72828fe940bcd67a8d35a5d92eb31261e9d57430 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Fri, 25 Jul 2014 11:21:55 -0600
+Subject: [PATCH 060/101] Added unable to connect dialog, fixing transparency
+ issues
+
+---
+ .../TeamScreen/Frames/PushSelect.java         | 12 +++-
+ .../TeamScreen/Frames/WindowSelect.java       | 64 +++++++++++++++++--
+ .../Net/Broker/TeamScreenBrokerThread.java    | 11 ++++
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java | 12 +++-
+ 4 files changed, 93 insertions(+), 6 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java
+index 0b8e2ec..2627f8e 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/PushSelect.java
+@@ -45,7 +45,17 @@ public class PushSelect extends JFrame implements ActionListener, KeyListener {
+ 		this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Already there
+ 	    this.setExtendedState(JFrame.MAXIMIZED_BOTH);
+ 	    this.setUndecorated(true);
+-	    this.setOpacity(0.55f);
++	    
++	    try {
++	    	this.setOpacity(0.55f);
++	    } catch (UnsupportedOperationException e) {
++	    	if(e.getMessage().contains("translucency")) {
++	    		;
++	    	}
++	    	else 
++	    		e.printStackTrace();
++	    }
++	    
+ 	    this.setBackground(Color.BLACK);
+ 	    
+ 	    initGui();
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
+index 3962a2d..223e031 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/WindowSelect.java
+@@ -3,12 +3,17 @@ package com.aptitekk.TeamScreen.Frames;
+ import java.awt.BorderLayout;
+ import java.awt.Color;
+ import java.awt.Dimension;
++import java.awt.Graphics;
++import java.awt.Graphics2D;
+ import java.awt.Point;
++import java.awt.Rectangle;
+ import java.awt.Window;
+ import java.awt.event.KeyEvent;
+ import java.awt.event.KeyListener;
+ import java.awt.event.MouseEvent;
+ import java.awt.event.MouseListener;
++import java.util.ArrayList;
++import java.util.List;
+ 
+ import javax.swing.JFrame;
+ import javax.swing.JLabel;
+@@ -28,6 +33,8 @@ public class WindowSelect extends JFrame implements MouseListener, KeyListener{
+ 
+ 	TeamScreenDaemon master;
+ 	
++	boolean translucencySupported = true;
++	
+ 	public WindowSelect(TeamScreenDaemon master) {
+ 		
+ 		this.master = master;
+@@ -35,8 +42,20 @@ public class WindowSelect extends JFrame implements MouseListener, KeyListener{
+ 		this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Already there
+ 	    this.setExtendedState(JFrame.MAXIMIZED_BOTH);
+ 	    this.setUndecorated(true);
+-	    this.setOpacity(0.55f);
++	    
++	    try {
++	    	this.setOpacity(0.55f);
++	    } catch (UnsupportedOperationException e) {
++	    	if(e.getMessage().contains("translucency")) {
++	    		translucencySupported = false;
++	    	}
++	    	else
++	    		e.printStackTrace();
++	    }
++	    
+ 	    this.setBackground(Color.BLACK);
++	    this.setGlassPane(new JPanel());
++	    this.getGlassPane().setVisible(true);
+ 	    
+ 	    initGui();
+ 	    
+@@ -49,12 +68,23 @@ public class WindowSelect extends JFrame implements MouseListener, KeyListener{
+ 	private void initGui() {
+ 		Dimension screenSize = java.awt.Toolkit.getDefaultToolkit().getScreenSize();
+ 		
++		Squares squaresPanel = new Squares();
++		
++		if(!translucencySupported) {
++			for(WindowInfo w : TeamScreenDaemon.getWindowManager().getWindows()) {
++				if(!w.getTitle().equals("")) {
++					squaresPanel.addSquare(w.getRect()[0], w.getRect()[1], w.getRect()[2], w.getRect()[3]);
++				}
++			}
++		}
++		this.add(squaresPanel);
++		
+ 		JPanel pane = new JPanel(new BorderLayout());
+-		JLabel infoText = new JLabel("<html><p style='font-size:40px'>Select window to share.</p></html>");
++		JLabel infoText = new JLabel("<html><p style='font-size:40px;height=50%;width=50%;'>Select window to share.</p></html>");
+ 		
+ 		pane.add(infoText);
+ 		
+-		this.add(pane);
++		((JPanel)this.getGlassPane()).add(pane);
+ 	}
+ 
+ 	@Override
+@@ -63,7 +93,7 @@ public class WindowSelect extends JFrame implements MouseListener, KeyListener{
+ 		Point where = e.getLocationOnScreen();
+ 		int x = where.x;
+ 		int y = where.y;
+-		for(WindowInfo w : master.getWindowManager().getWindows()) {
++		for(WindowInfo w : TeamScreenDaemon.getWindowManager().getWindows()) {
+ 			System.out.println(w.toString());
+ 			//check if point intersects with any window, and remove other crap
+ 			if(!w.getTitle().equals("")) {
+@@ -137,4 +167,30 @@ public class WindowSelect extends JFrame implements MouseListener, KeyListener{
+ 
+ 	@Override
+ 	public void keyTyped(KeyEvent arg0) {;}
++
++	class Squares extends JPanel {
++		private static final int PREF_W = 500;
++		private static final int PREF_H = PREF_W;
++		private List<Rectangle> squares = new ArrayList<Rectangle>();
++
++		public void addSquare(int x, int y, int width, int height) {
++			Rectangle rect = new Rectangle(x, y, width, height);
++			squares.add(rect);
++		}
++
++		@Override
++		public Dimension getPreferredSize() {
++			return new Dimension(PREF_W, PREF_H);
++		}
++
++		@Override
++		protected void paintComponent(Graphics g) {
++			super.paintComponent(g);
++			Graphics2D g2 = (Graphics2D) g;
++			for (Rectangle rect : squares) {
++				g2.draw(rect);
++			}
++		}
++
++	}
+ }
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broker/TeamScreenBrokerThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broker/TeamScreenBrokerThread.java
+index be9038b..9321921 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broker/TeamScreenBrokerThread.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broker/TeamScreenBrokerThread.java
+@@ -8,6 +8,9 @@ import java.net.InetAddress;
+ import java.net.InetSocketAddress;
+ import java.net.Socket;
+ import java.net.SocketAddress;
++import java.net.SocketTimeoutException;
++
++import javax.swing.JOptionPane;
+ 
+ import com.aptitekk.TeamScreen.TeamScreenDaemon;
+ import com.aptitekk.TeamScreen.Net.NetHandler;
+@@ -52,6 +55,14 @@ public class TeamScreenBrokerThread extends Thread{
+ 				enabled = false;
+ 			}
+ 			this.interrupt();
++		} catch (SocketTimeoutException exception) {
++			exception.printStackTrace();
++			JOptionPane.showMessageDialog(null,
++				    "TeamScreen couldn't connect to the neighbor you wanted to share with.\nPlease make sure that:"+
++				    		"\n\r1. The machine is on\n\r2. They possess the same IP address that is in your settings\n\r"+
++				    		"3. Double-check that TeamScreen is running",
++				    "Could not connect",
++				    JOptionPane.ERROR_MESSAGE);
+ 		} catch (IOException exception) {
+ 			exception.printStackTrace();
+ 		} 
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index 5779a43..567405a 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -11,6 +11,8 @@ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
+ import java.awt.event.KeyEvent;
+ import java.awt.event.KeyListener;
++import java.awt.event.MouseAdapter;
++import java.awt.event.MouseEvent;
+ import java.io.IOException;
+ import java.net.URI;
+ import java.net.URL;
+@@ -257,6 +259,13 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+             	openMainWindow();
+             }
+         });
++        trayIcon.addMouseListener(new MouseAdapter() {
++            public void mouseClicked(MouseEvent e) {
++                if (e.getClickCount() == 1 && e.getButton() == MouseEvent.BUTTON1) {
++                	openMainWindow();
++                }
++            }
++        }); 
+          
+         ActionListener listener = new ActionListener() {
+             @Override
+@@ -298,7 +307,8 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+             @Override
+ 			public void actionPerformed(ActionEvent e) {
+                 tray.remove(trayIcon);
+-                JIntellitype.getInstance().cleanUp();
++                if(FolderManager.isWindows())
++                	JIntellitype.getInstance().cleanUp();
+                 System.exit(0);
+             }
+         });
+-- 
+2.39.5 (Apple Git-154)
+

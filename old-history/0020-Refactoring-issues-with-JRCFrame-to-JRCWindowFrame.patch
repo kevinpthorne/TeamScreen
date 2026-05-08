@@ -1,0 +1,42 @@
+From 6cb53b1baa480c02aa8d45d0edf14135db31ac3e Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 6 Apr 2014 22:01:28 -0600
+Subject: [PATCH 020/101] Refactoring issues with JRCFrame to JRCWindowFrame
+
+---
+ .../src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java       | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
+index 07cc107..1298bde 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
+@@ -36,7 +36,7 @@ public class JRCClient extends Thread implements RemoteClientController,MouseLis
+ 	
+ 	private boolean clientRunning = false;
+ 	
+-	private JRCFrame client;
++	private JRCWindowFrame client;
+ 	
+ 	private Connection mainConnection;
+ 	private Connection controlConnection;
+@@ -113,7 +113,6 @@ public class JRCClient extends Thread implements RemoteClientController,MouseLis
+ 				this.mainConnection = new SocketConnection( new Socket(this.address,this.port),this.address+":"+this.port );
+ 			//}
+ 		
+-			this.client = new JRCFrame(this);
+ 			showClient();
+ 			
+ 			TeamScreenDaemon.logger.info("Logged in. Sending alias "+hubAlias+" to server.");
+@@ -186,7 +185,7 @@ public class JRCClient extends Thread implements RemoteClientController,MouseLis
+ 		SwingUtilities.invokeLater(new Runnable() {
+             @Override
+             public void run() {
+-            	client = new JRCFrame(clientVar);
++            	client = new JRCWindowFrame(clientVar);
+                 client.setVisible(true);
+             }
+         });
+-- 
+2.39.5 (Apple Git-154)
+

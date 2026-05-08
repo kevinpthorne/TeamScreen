@@ -1,0 +1,25 @@
+From 0266b6661e16d0e5434e61f45e04ea52ec361799 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 13 Apr 2014 16:07:09 -0600
+Subject: [PATCH 038/101] Fixed BoxLayout parameters
+
+---
+ .../com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java   | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
+index 400361f..6d9c0ea 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
+@@ -40,7 +40,7 @@ public class JRCClientWindowFrame extends JFrame implements RemoteControlClient
+ 		});
+ 		
+ 		this.setTitle(title + " - TeamScreen");
+-		this.setLayout(new BoxLayout(this, BoxLayout.PAGE_AXIS));
++		this.setLayout(new BoxLayout(getContentPane(), BoxLayout.PAGE_AXIS));
+ 		
+ 		this.viewIcon = new ImageIcon( ImageFactory.loadImage("jar://images/teamscreen.png") );
+ 		
+-- 
+2.39.5 (Apple Git-154)
+

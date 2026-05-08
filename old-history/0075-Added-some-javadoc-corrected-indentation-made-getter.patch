@@ -1,0 +1,1097 @@
+From 9289cbd8cedad9015c5f177adac783e6f0bf2625 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 30 Jul 2014 09:53:26 -0600
+Subject: [PATCH 075/101] Added some javadoc, corrected indentation, made
+ getter for PropertiesHandler
+
+---
+ .../TeamScreen/AutoUpdater/AutoUpdater.java   |  45 +-
+ .../AutoUpdaterDownloadThread.java            |   2 +-
+ .../TeamScreenBroadcastThread.java            |   4 +-
+ .../aptitekk/TeamScreen/Net/NetHandler.java   |   2 +-
+ .../TeamScreen/Net/PacketProcessor.java       |   2 +-
+ .../aptitekk/TeamScreen/Net/RadarThread.java  |   2 +-
+ .../TeamScreen/Net/jrc/ClientApplication.java |   2 +-
+ .../Net/jrc/DynamicJRCServerApplication.java  |   2 +-
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java | 793 +++++++++---------
+ .../Window/Util/JNeighborDisplayPanel.java    |  28 +-
+ 10 files changed, 462 insertions(+), 420 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
+index fe0ab9a..8ddcfc6 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdater.java
+@@ -15,13 +15,36 @@ import java.util.ArrayList;
+ 
+ import org.apache.commons.io.FileUtils;
+ 
++/**
++ * AutoUpdater portion of TeamScreen
++ * 
++ * @author Mitch Talmadge
++ *
++ */
+ public class AutoUpdater
+ {
+-    public static final String modType = "TeamScreen";
++    /** Static variables that connection to the server requires.
++     */
++    public static final String applicationName = "TeamScreen";
++    
++    /** Static variables that connection to the server requires.
++     */
+     public static final String updaterURLPrefix = "https://AptiTekk.com/AutoUpdater/V1/";
++    /** Static variables that connection to the server requires.
++     * 
++     */
+     public static final String updaterChangeLogSuffix = "ChangeLogFactory.php";
++    /**
++     * Static variables that connection to the server requires.
++     */
+     public static final String updaterFileTransferSuffix = "FileTransfer.php";
++    /**
++     * Static variables that connection to the server requires.
++     */
+     public static final String updaterVersionFinderSuffix = "VersionFinder.php";
++    /**
++     * Static variables that connection to the server requires.
++     */
+     public static final String updaterHandshakeSuffix = "Handshake.php";
+     
+     private int currentVersionID;
+@@ -83,12 +106,15 @@ public class AutoUpdater
+ 	}
+     }
+     
++    /**
++     * Checks for updates on the server
++     */
+     public void checkForUpdates()
+     {
+ 	System.out.println("Checking for Updates...");
+ 	
+ 	String POSTData = "currentVersionID=" + currentVersionID + "&modType="
+-		+ AutoUpdater.modType;
++		+ AutoUpdater.applicationName;
+ 	
+ 	String result = this.sendPOSTGetString(AutoUpdater.updaterURLPrefix
+ 		+ AutoUpdater.updaterVersionFinderSuffix, POSTData);
+@@ -143,7 +169,7 @@ public class AutoUpdater
+     private boolean generateHandshake()
+     {
+ 	String POSTData = "currentVersionID=" + currentVersionID + "&modType="
+-		+ AutoUpdater.modType;
++		+ AutoUpdater.applicationName;
+ 	String data = this.sendPOSTGetString(AutoUpdater.updaterURLPrefix
+ 		+ AutoUpdater.updaterHandshakeSuffix, POSTData);
+ 	if(data != null && !data.isEmpty())
+@@ -214,6 +240,9 @@ public class AutoUpdater
+ 	return "ERROR:noConnection";
+     }
+     
++    /**
++     * 
++     */
+     public static void deleteUpdatesFolder()
+     {
+ 	File updatesFolder = new File(getAbsDir()+"/updates");
+@@ -233,11 +262,17 @@ public class AutoUpdater
+ 	    autoUpdater.delete();
+     }
+     
++    /**
++     * @return Current version
++     */
+     public String getCurrentVersionName()
+     {
+ 	return this.currentVersionName;
+     }
+     
++    /**
++     * @return Location of the jar
++     */
+     public static String getAbsDir()
+     {
+ 	try
+@@ -253,6 +288,10 @@ public class AutoUpdater
+ 	}
+     }
+ 
++    /**
++     * @param path
++     * @return Internal URL for files inside the jar
++     */
+     public static URL getResourceByPath(String path)
+     {
+ 	return AutoUpdater.class.getResource(path);
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
+index 3160aa2..a8ad251 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/AutoUpdater/AutoUpdaterDownloadThread.java
+@@ -46,7 +46,7 @@ public class AutoUpdaterDownloadThread extends Thread
+     private boolean downloadUpdate(int versionID)
+     {
+ 	String POSTData = "versionID=" + versionID + "&modType="
+-		+ AutoUpdater.modType + "&handShake="
++		+ AutoUpdater.applicationName + "&handShake="
+ 		+ this.handShake.getHandShakeResult();
+ 	
+ 	URLConnection connection = this.sendPOSTGetConnection(
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java
+index 569cd0f..526c5df 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/Broadcaster/TeamScreenBroadcastThread.java
+@@ -51,7 +51,7 @@ public class TeamScreenBroadcastThread extends Thread{
+     @Override
+     public void run() {
+         try {
+-            String name = TeamScreenDaemon.properties.getConfig().getProperty("Name");
++            String name = TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("Name");
+             
+             String IP = this.socket.getLocalAddress().getHostAddress();
+            
+@@ -60,7 +60,7 @@ public class TeamScreenBroadcastThread extends Thread{
+             List<String> slots = Arrays.asList(new String[]{"A","B","C","D","E","F"});
+             Integer[] ports = new Integer[]{4455, 4456, 4457, 4458, 4459, 4460};
+             
+-            int port = ports[slots.indexOf(TeamScreenDaemon.properties.getConfig().getProperty("Slot"))];
++            int port = ports[slots.indexOf(TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("Slot"))];
+             
+             DatagramPacket packet = new DatagramPacket(ad, ad.length, InetAddress.getByName("224.0.2.12"), port);
+             TeamScreenDaemon.logger.info("Broadcasting session over LAN from " + this.socket.getLocalAddress());
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
+index 3c0d7b7..49ed99d 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
+@@ -111,7 +111,7 @@ public class NetHandler {
+ 	
+ 	public void requestConnecttoNeighbor(int direction) {
+ 		try {
+-			Properties prop = TeamScreenDaemon.properties.getConfig();
++			Properties prop = TeamScreenDaemon.getPropertiesHandler().getConfig();
+ 			if(direction == JArrowButton.NORTH) {
+ 				if(!prop.getProperty("TNeighbor").equals("")) {
+ 					// [name]:[IP]:[slot]
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+index 211bfc9..f3269d4 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/PacketProcessor.java
+@@ -40,7 +40,7 @@ public class PacketProcessor {
+ 					try {
+ 						return buildPacket(new String[]{"connectToMe",
+ 								TeamScreenBroadcastThread.getLanIP(),
+-								TeamScreenDaemon.properties.getConfig().getProperty("Slot"),
++								TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("Slot"),
+ 								TeamScreenDaemon.windowPushed.getTitle()});
+ 					} catch (Exception exception) {
+ 						exception.printStackTrace();
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/RadarThread.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/RadarThread.java
+index 7093593..7f28077 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/RadarThread.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/RadarThread.java
+@@ -48,7 +48,7 @@ public class RadarThread extends Thread{
+ 			List<String> slots = Arrays.asList(new String[]{"A","B","C","D","E","F"});
+             Integer[] ports = new Integer[]{4455, 4456, 4457, 4458, 4459, 4460};
+             
+-            int port = ports[slots.indexOf(TeamScreenDaemon.properties.getConfig().getProperty("Slot"))];
++            int port = ports[slots.indexOf(TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("Slot"))];
+ 			socket = new MulticastSocket(port);
+ 			group = InetAddress.getByName("224.0.2.12");
+ 			socket.joinGroup(group);
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/ClientApplication.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/ClientApplication.java
+index e43b8e7..e98e970 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/ClientApplication.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/ClientApplication.java
+@@ -97,7 +97,7 @@ public class ClientApplication extends Thread implements RemoteClientController,
+ 		
+ 		String hubAlias;
+ 		try {
+-			hubAlias = TeamScreenDaemon.properties.getConfig().getProperty("Name");
++			hubAlias = TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("Name");
+ 		} catch (IOException exception) {
+ 			hubAlias = "null";
+ 			exception.printStackTrace();
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+index 03c41b9..b448f90 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+@@ -147,7 +147,7 @@ public class DynamicJRCServerApplication extends Thread {
+ 		String address = TeamScreenBroadcastThread.getLanIP();
+ 		List<String> slots = Arrays.asList(new String[]{"A","B","C","D","E","F"});
+         Integer[] ports = new Integer[]{4455, 4456, 4457, 4458, 4459, 4460};
+-        int port = ports[slots.indexOf(TeamScreenDaemon.properties.getConfig().getProperty("Slot"))];
++        int port = ports[slots.indexOf(TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("Slot"))];
+ 		
+ 		this.server = new DynamicRemoteControlServer(this);
+ 		this.server.setAutoAccept(true);
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index 4c036a7..b80aa2b 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -55,417 +55,420 @@ import com.melloware.jintellitype.JIntellitypeException;
+  *         Created Apr 3, 2014.
+  */
+ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterListener{
+-    
+-    public static TrayIcon trayIcon;
+-    
+-    public static final Logger logger = Logger.getLogger("TeamScreen");
+-    
+-    private final Set<Character> keysPressed = new HashSet<Character>();
+-    
+-    public static PropertiesHandler properties;
+-    public static String runningversion;
+-    public static final SystemTray tray = SystemTray.getSystemTray();
+-    public NetHandler netHandler;
+-    
+-    static MainFrame frame;
+-    static SettingsFrame sframe;
+-    TeamScreenDaemon instance = null;
+-    static boolean enabled = true;
+-    static WindowSelect wSelect;
+-    static PushSelect pSelect;
+-    public static WindowInfo windowPushed;
+-    
+-    static WindowManager wManager;
+-    
+-    /**
+-     * Start up here
+-     *
+-     * @param args
+-     */
+-    public static void main(String[] args) 
+-    {
+-	UIManager.put("ProgressBar.background", Color.WHITE);
+-	UIManager.put("ProgressBar.foreground", new Color(0, 120, 255));
+-	UIManager.put("ProgressBar.selectionBackground", Color.WHITE);
+-	UIManager.put("ProgressBar.selectionForeground", Color.WHITE);
+-	UIManager.put("ProgressBar.border", new EmptyBorder(5, 0, 5, 0));
+-	UIManager
+-	.put("ProgressBar.font", new Font("SansSerif", Font.PLAIN, 12));
+-	
+-	new TeamScreenDaemon();
+-    }
+-    
+-    private TeamScreenDaemon() {
+-	instance = this;
+-	logger.info("Starting TeamScreen...");
+-	
+-	try
++
++	public static TrayIcon trayIcon;
++
++	public static final Logger logger = Logger.getLogger("TeamScreen");
++
++	private final Set<Character> keysPressed = new HashSet<Character>();
++
++	static PropertiesHandler properties;
++	public static String runningversion;
++	public static final SystemTray tray = SystemTray.getSystemTray();
++	public NetHandler netHandler;
++
++	static MainFrame frame;
++	static SettingsFrame sframe;
++	TeamScreenDaemon instance = null;
++	static boolean enabled = true;
++	static WindowSelect wSelect;
++	static PushSelect pSelect;
++	public static WindowInfo windowPushed;
++
++	static WindowManager wManager;
++
++	/**
++	 * Start up here
++	 *
++	 * @param args
++	 */
++	public static void main(String[] args) 
+ 	{
+-	    
+-	    properties = new PropertiesHandler();
+-	    
+-	    logger.setUseParentHandlers(false);
+-	    LogFormat formatter = new LogFormat();
+-	    ConsoleHandler consoleHandler = new ConsoleHandler();
+-	    consoleHandler.setFormatter(formatter);
+-	    logger.addHandler(consoleHandler);
+-	    if(Boolean.valueOf(properties.getConfig().getProperty("Log"))) {
+-		FileHandler fh;
+-		try {
+-		    logger.info("Opened log file at: " + FolderManager.getAbsDir() + "/TeamScreen.log");
+-		    fh = new FileHandler(FolderManager.getAbsDir() + "/TeamScreen.log");
+-		    fh.setFormatter(formatter);
+-		    logger.addHandler(fh);
+-		} catch (Exception exception) {
+-		    logger.severe("Could not create log file, not storing logs. Caused by: " + exception.getCause());
++		UIManager.put("ProgressBar.background", Color.WHITE);
++		UIManager.put("ProgressBar.foreground", new Color(0, 120, 255));
++		UIManager.put("ProgressBar.selectionBackground", Color.WHITE);
++		UIManager.put("ProgressBar.selectionForeground", Color.WHITE);
++		UIManager.put("ProgressBar.border", new EmptyBorder(5, 0, 5, 0));
++		UIManager
++		.put("ProgressBar.font", new Font("SansSerif", Font.PLAIN, 12));
++
++		new TeamScreenDaemon();
++	}
++
++	private TeamScreenDaemon() {
++		instance = this;
++		logger.info("Starting TeamScreen...");
++
++		try
++		{
++
++			properties = new PropertiesHandler();
++
++			logger.setUseParentHandlers(false);
++			LogFormat formatter = new LogFormat();
++			ConsoleHandler consoleHandler = new ConsoleHandler();
++			consoleHandler.setFormatter(formatter);
++			logger.addHandler(consoleHandler);
++			if(Boolean.valueOf(properties.getConfig().getProperty("Log"))) {
++				FileHandler fh;
++				try {
++					logger.info("Opened log file at: " + FolderManager.getAbsDir() + "/TeamScreen.log");
++					fh = new FileHandler(FolderManager.getAbsDir() + "/TeamScreen.log");
++					fh.setFormatter(formatter);
++					logger.addHandler(fh);
++				} catch (Exception exception) {
++					logger.severe("Could not create log file, not storing logs. Caused by: " + exception.getCause());
++				}
++			}
++			//register window managers and hotkey managers
++
++			if(FolderManager.isWindows()) {
++				wManager = new WindowsNative(); logger.info("Windows Detected");
++				JIntellitype.getInstance();
++				//JIntellitype.getInstance().registerHotKey(1, Integer.valueOf(properties.getConfig().getProperty("KeyStroke")).intValue()
++				//		, Integer.valueOf(properties.getConfig().getProperty("KeyStrokeEnd")).intValue());
++				JIntellitype.getInstance().registerHotKey(1, JIntellitype.MOD_CONTROL + JIntellitype.MOD_SHIFT, (int)'1');
++				JIntellitype.getInstance().addHotKeyListener(this);
++			} else if(FolderManager.isMac()) {
++				logger.info("Mac OS X detected"); throw new NotImplementedException("Mac is not supported yet.");
++			} else if(FolderManager.isUnix()) {
++				wManager = new X11Native(); logger.info("X11/Unix detected");
++			} else {
++				logger.info("No supported OS detected"); throw new UnsupportedOperationException("You aren't running Unix, Mac, or Windows.");
++			}
++
++			createTray();
++			addTray();
++
++			displayPopup(trayIcon, "Checking For Updates...", "TeamScreen is now checking for updates...", TrayIcon.MessageType.INFO);
++
++			AutoUpdater updater = new AutoUpdater(true, FolderManager.createImage("/images/TeamScreen-64px.png", "tray icon"));
++			updater.addUpdaterListener(this);
++			updater.checkForUpdates();
++
++			this.netHandler = new NetHandler(this);
++
++			displayPopup(trayIcon, "Ready", "Initialization complete.", TrayIcon.MessageType.INFO);
++
++			//openMainWindow();
++
++			logger.info("Started TeamScreen successfully!");
++		} catch (JIntellitypeException e) {
++			if(FolderManager.isWindows())
++				JOptionPane.showMessageDialog(null,
++						"TeamScreen is already running!",
++						"Redundant Process",
++						JOptionPane.ERROR_MESSAGE);
++			else
++				JOptionPane.showMessageDialog(null,
++						"TeamScreen was confused on whether you were running Windows or not...",
++						"Well, this is embarrassing",
++						JOptionPane.ERROR_MESSAGE);
++			System.exit(1);
++		} catch (NotImplementedException e) {
++			JOptionPane.showMessageDialog(null,
++					e.getMessage(),
++					"NotImplementedException",
++					JOptionPane.ERROR_MESSAGE);
++			e.printStackTrace();
++			if(FolderManager.isWindows())
++				JIntellitype.getInstance().cleanUp();
++			System.exit(1);
++		} catch (UnsupportedOperationException e) {
++			JOptionPane.showMessageDialog(null,
++					e.getMessage(),
++					"UnsupportedOperationException",
++					JOptionPane.ERROR_MESSAGE);
++			e.printStackTrace();
++			if(FolderManager.isWindows())
++				JIntellitype.getInstance().cleanUp();
++			System.exit(1);
++		} catch(Exception e) {
++			e.printStackTrace();
++			JOptionPane.showMessageDialog(null,
++					"TeamScreen has managed to cause an error:\n"
++							+e.getMessage(),
++							"Error",
++							JOptionPane.ERROR_MESSAGE);
++			if(FolderManager.isWindows())
++				JIntellitype.getInstance().cleanUp();
++			System.exit(1);
+ 		}
+-	    }
+-	    //register window managers and hotkey managers
+-	    
+-	    if(FolderManager.isWindows()) {
+-		wManager = new WindowsNative(); logger.info("Windows Detected");
+-		JIntellitype.getInstance();
+-		//JIntellitype.getInstance().registerHotKey(1, Integer.valueOf(properties.getConfig().getProperty("KeyStroke")).intValue()
+-		//		, Integer.valueOf(properties.getConfig().getProperty("KeyStrokeEnd")).intValue());
+-		JIntellitype.getInstance().registerHotKey(1, JIntellitype.MOD_CONTROL + JIntellitype.MOD_SHIFT, (int)'1');
+-		JIntellitype.getInstance().addHotKeyListener(this);
+-	    } else if(FolderManager.isMac()) {
+-		logger.info("Mac OS X detected"); throw new NotImplementedException("Mac is not supported yet.");
+-	    } else if(FolderManager.isUnix()) {
+-		wManager = new X11Native(); logger.info("X11/Unix detected");
+-	    } else {
+-		logger.info("No supported OS detected"); throw new UnsupportedOperationException("You aren't running Unix, Mac, or Windows.");
+-	    }
+-	    
+-	    createTray();
+-	    addTray();
+-	    
+-	    displayPopup(trayIcon, "Checking For Updates...", "TeamScreen is now checking for updates...", TrayIcon.MessageType.INFO);
+-	    
+-	    AutoUpdater updater = new AutoUpdater(true, FolderManager.createImage("/images/TeamScreen-64px.png", "tray icon"));
+-	    updater.addUpdaterListener(this);
+-	    updater.checkForUpdates();
+-	    
+-	    this.netHandler = new NetHandler(this);
+-	    
+-	    displayPopup(trayIcon, "Ready", "Initialization complete.", TrayIcon.MessageType.INFO);
+-	    
+-	    //openMainWindow();
+-	    
+-	    logger.info("Started TeamScreen successfully!");
+-	} catch (JIntellitypeException e) {
+-	    if(FolderManager.isWindows())
+-		JOptionPane.showMessageDialog(null,
+-			"TeamScreen is already running!",
+-			"Redundant Process",
+-			JOptionPane.ERROR_MESSAGE);
+-	    else
+-		JOptionPane.showMessageDialog(null,
+-			"TeamScreen was confused on whether you were running Windows or not...",
+-			"Well, this is embarrassing",
+-			JOptionPane.ERROR_MESSAGE);
+-	    System.exit(1);
+-	} catch (NotImplementedException e) {
+-	    JOptionPane.showMessageDialog(null,
+-		    e.getMessage(),
+-		    "NotImplementedException",
+-		    JOptionPane.ERROR_MESSAGE);
+-	    e.printStackTrace();
+-	    if(FolderManager.isWindows())
+-		JIntellitype.getInstance().cleanUp();
+-	    System.exit(1);
+-	} catch (UnsupportedOperationException e) {
+-	    JOptionPane.showMessageDialog(null,
+-		    e.getMessage(),
+-		    "UnsupportedOperationException",
+-		    JOptionPane.ERROR_MESSAGE);
+-	    e.printStackTrace();
+-	    if(FolderManager.isWindows())
+-		JIntellitype.getInstance().cleanUp();
+-	    System.exit(1);
+-	} catch(Exception e) {
+-	    e.printStackTrace();
+-	    JOptionPane.showMessageDialog(null,
+-		    "TeamScreen has managed to cause an error:\n"
+-			    +e.getMessage(),
+-			    "Error",
+-			    JOptionPane.ERROR_MESSAGE);
+-	    if(FolderManager.isWindows())
+-		JIntellitype.getInstance().cleanUp();
+-	    System.exit(1);
++
++		//Thread.currentThread().setDaemon(true);
+ 	}
+-	
+-	//Thread.currentThread().setDaemon(true);
+-    }
+-    
+-    public static void displayPopup(TrayIcon tray, String title, String text, TrayIcon.MessageType type) {
+-	try {
+-	    if(properties.getConfig().containsKey("NotificationLevel")) {
+-		if(properties.getConfig().getProperty("NotificationLevel").equalsIgnoreCase("warning")) {
+-		    if(type.equals(TrayIcon.MessageType.WARNING)) {
+-			tray.displayMessage(title, text, type);
+-		    }
+-		} else if(properties.getConfig().getProperty("NotificationLevel").equalsIgnoreCase("info")) {
+-		    if(type.equals(TrayIcon.MessageType.INFO) || type.equals(TrayIcon.MessageType.WARNING) || type.equals(TrayIcon.MessageType.ERROR)) {
+-			tray.displayMessage(title, text, type);
+-		    }
+-		} else if(properties.getConfig().getProperty("NotificationLevel").equalsIgnoreCase("error")) {
+-		    if(type.equals(TrayIcon.MessageType.ERROR) || type.equals(TrayIcon.MessageType.WARNING)) {
+-			tray.displayMessage(title, text, type);
+-		    }
++
++	public static void displayPopup(TrayIcon tray, String title, String text, TrayIcon.MessageType type) {
++		try {
++			if(properties.getConfig().containsKey("NotificationLevel")) {
++				if(properties.getConfig().getProperty("NotificationLevel").equalsIgnoreCase("warning")) {
++					if(type.equals(TrayIcon.MessageType.WARNING)) {
++						tray.displayMessage(title, text, type);
++					}
++				} else if(properties.getConfig().getProperty("NotificationLevel").equalsIgnoreCase("info")) {
++					if(type.equals(TrayIcon.MessageType.INFO) || type.equals(TrayIcon.MessageType.WARNING) || type.equals(TrayIcon.MessageType.ERROR)) {
++						tray.displayMessage(title, text, type);
++					}
++				} else if(properties.getConfig().getProperty("NotificationLevel").equalsIgnoreCase("error")) {
++					if(type.equals(TrayIcon.MessageType.ERROR) || type.equals(TrayIcon.MessageType.WARNING)) {
++						tray.displayMessage(title, text, type);
++					}
++				}
++			}
++			else {
++				System.err.println("No NotificationLevel found");
++				properties.getConfig().setProperty("NotificationLevel", "info");
++				properties.saveConfig();
++				tray.displayMessage(title, text, type);
++			}
++
++		} catch (IOException e) {
++			e.printStackTrace();
+ 		}
+-	    }
+-	    else {
+-		System.err.println("No NotificationLevel found");
+-		properties.getConfig().setProperty("NotificationLevel", "info");
+-		properties.saveConfig();
+-		tray.displayMessage(title, text, type);
+-	    }
+-	    
+-	} catch (IOException e) {
+-	    e.printStackTrace();
+ 	}
+-    }
+-    
+-    public void enable() {
+-	displayPopup(trayIcon, "TeamScreen now enabled!", "Services started.", TrayIcon.MessageType.INFO);
+-	logger.info("TeamScreen enabled.");
+-	enabled = true;
+-	this.netHandler.enable();
+-	if(frame != null)
+-	    frame.updateStatus();
+-    }
+-    public void disable() {
+-	displayPopup(trayIcon, "TeamScreen now disabled!", "Services stopped.", TrayIcon.MessageType.INFO);
+-	logger.info("TeamScreen disabled.");
+-	this.netHandler.disable();
+-	enabled = false;
+-	if(frame != null)
+-	    frame.updateStatus();
+-    }
+-    public void exit() {
+-	try {
+-	    properties.saveConfig();
+-	    logger.info("Configuration saved succesfully");
+-	} catch (IOException e) {
+-	    e.printStackTrace();
+-	    logger.severe("Configuration could not be saved");
++
++	public void enable() {
++		displayPopup(trayIcon, "TeamScreen now enabled!", "Services started.", TrayIcon.MessageType.INFO);
++		logger.info("TeamScreen enabled.");
++		enabled = true;
++		this.netHandler.enable();
++		if(frame != null)
++			frame.updateStatus();
++	}
++	public void disable() {
++		displayPopup(trayIcon, "TeamScreen now disabled!", "Services stopped.", TrayIcon.MessageType.INFO);
++		logger.info("TeamScreen disabled.");
++		this.netHandler.disable();
++		enabled = false;
++		if(frame != null)
++			frame.updateStatus();
++	}
++	public void exit() {
++		try {
++			properties.saveConfig();
++			logger.info("Configuration saved succesfully");
++		} catch (IOException e) {
++			e.printStackTrace();
++			logger.severe("Configuration could not be saved");
++		}
++		tray.remove(trayIcon);
++		if(FolderManager.isWindows())
++			JIntellitype.getInstance().cleanUp();
++		System.exit(0);
+ 	}
+-	tray.remove(trayIcon);
+-	if(FolderManager.isWindows())
+-	    JIntellitype.getInstance().cleanUp();
+-	System.exit(0);
+-    }
+-    public boolean isEnabled() {
+-	return enabled;
+-    }
+-    
+-    private void createTray() {
+-	//Check the SystemTray support
+-	if (!SystemTray.isSupported()) {
+-	    System.out.println("SystemTray is not supported");
+-	    return;
++	public boolean isEnabled() {
++		return enabled;
+ 	}
+-	final PopupMenu popup = new PopupMenu();
+-	
+-	trayIcon = new TrayIcon(createImage("/images/TeamScreen-64px.png", "tray icon"));
+-	
+-	
+-	// Create a popup menu components
+-	MenuItem openItem = new MenuItem("Open");
+-	MenuItem pushItem = new MenuItem("Push Window");
+-	MenuItem aboutItem = new MenuItem("About");
+-	MenuItem exitItem = new MenuItem("Exit");
+-	
+-	//Add components to popup menu
+-	popup.add(openItem);
+-	popup.addSeparator();
+-	popup.add(pushItem);
+-	popup.addSeparator();
+-	popup.add(aboutItem);
+-	popup.add(exitItem);
+-	
+-	trayIcon.setPopupMenu(popup);
+-	trayIcon.setToolTip("TeamScreen");
+-	trayIcon.setImageAutoSize(true);
+-	
+-	trayIcon.addActionListener(new ActionListener() {
+-	    @Override
+-	    public void actionPerformed(ActionEvent e) {
+-		openMainWindow();
+-	    }
+-	});
+-	trayIcon.addMouseListener(new MouseAdapter() {
+-	    public void mouseClicked(MouseEvent e) {
+-		if (e.getClickCount() == 1 && e.getButton() == MouseEvent.BUTTON1) {
+-		    openMainWindow();
++
++	private void createTray() {
++		//Check the SystemTray support
++		if (!SystemTray.isSupported()) {
++			System.out.println("SystemTray is not supported");
++			return;
+ 		}
+-	    }
+-	}); 
+-	
+-	ActionListener listener = new ActionListener() {
+-	    @Override
+-	    public void actionPerformed(ActionEvent e) {
+-		MenuItem item = (MenuItem)e.getSource();
+-		System.out.println(item.getLabel());
+-		if ("Open".equals(item.getLabel())) {
+-		    SwingUtilities.invokeLater(new Runnable() {
++		final PopupMenu popup = new PopupMenu();
++
++		trayIcon = new TrayIcon(createImage("/images/TeamScreen-64px.png", "tray icon"));
++
++
++		// Create a popup menu components
++		MenuItem openItem = new MenuItem("Open");
++		MenuItem pushItem = new MenuItem("Push Window");
++		MenuItem aboutItem = new MenuItem("About");
++		MenuItem exitItem = new MenuItem("Exit");
++
++		//Add components to popup menu
++		popup.add(openItem);
++		popup.addSeparator();
++		popup.add(pushItem);
++		popup.addSeparator();
++		popup.add(aboutItem);
++		popup.add(exitItem);
++
++		trayIcon.setPopupMenu(popup);
++		trayIcon.setToolTip("TeamScreen");
++		trayIcon.setImageAutoSize(true);
++
++		trayIcon.addActionListener(new ActionListener() {
+ 			@Override
+-			public void run() {
+-			    openMainWindow();
++			public void actionPerformed(ActionEvent e) {
++				openMainWindow();
++			}
++		});
++		trayIcon.addMouseListener(new MouseAdapter() {
++			public void mouseClicked(MouseEvent e) {
++				if (e.getClickCount() == 1 && e.getButton() == MouseEvent.BUTTON1) {
++					openMainWindow();
++				}
++			}
++		}); 
++
++		ActionListener listener = new ActionListener() {
++			@Override
++			public void actionPerformed(ActionEvent e) {
++				MenuItem item = (MenuItem)e.getSource();
++				System.out.println(item.getLabel());
++				if ("Open".equals(item.getLabel())) {
++					SwingUtilities.invokeLater(new Runnable() {
++						@Override
++						public void run() {
++							openMainWindow();
++						}
++					});
++
++				} else if ("Push Window".equals(item.getLabel())) {
++					SwingUtilities.invokeLater(new Runnable() {
++						@Override
++						public void run() {
++							openWindowSelect();
++						}
++					});
++				} else if ("About".equals(item.getLabel())) {
++					if(Desktop.isDesktopSupported()) {
++						try {
++							Desktop.getDesktop().browse(URI.create("http://aptitekk.com/our-products/teamscreen/"));
++						} catch (IOException e1) {
++							e1.printStackTrace();
++						}
++					}
++				}
+ 			}
+-		    });
+-		    
+-		} else if ("Push Window".equals(item.getLabel())) {
+-		    SwingUtilities.invokeLater(new Runnable() {
++		};
++
++		openItem.addActionListener(listener);
++		pushItem.addActionListener(listener);
++		aboutItem.addActionListener(listener);
++
++		exitItem.addActionListener(new ActionListener() {
+ 			@Override
++			public void actionPerformed(ActionEvent e) {
++				tray.remove(trayIcon);
++				if(FolderManager.isWindows())
++					JIntellitype.getInstance().cleanUp();
++				System.exit(0);
++			}
++		});
++	}
++
++	protected void openMainWindow() {
++		SwingUtilities.invokeLater(new Runnable() {
+ 			public void run() {
+-			    openWindowSelect();
++				if(frame == null)
++					frame = new MainFrame(instance);
++				frame.setVisible(true);
+ 			}
+-		    });
+-		} else if ("About".equals(item.getLabel())) {
+-		    if(Desktop.isDesktopSupported()) {
+-			try {
+-			    Desktop.getDesktop().browse(URI.create("http://aptitekk.com/our-products/teamscreen/"));
+-			} catch (IOException e1) {
+-			    e1.printStackTrace();
++		});
++	}
++	public void openSettingsWindow() {
++		SwingUtilities.invokeLater(new Runnable() {
++			public void run() {
++				if(sframe == null)
++					sframe = new SettingsFrame(instance);
++				sframe.setVisible(true);
+ 			}
+-		    }
++		});
++	}
++
++	/**
++	 * Obtain the image from inside the jar
++	 *
++	 * @param path
++	 * @param description
++	 * @return
++	 */
++	protected static Image createImage(String path, String description) {
++		URL imageURL = TeamScreenDaemon.class.getResource(path);
++
++		if (imageURL == null) {
++			TeamScreenDaemon.logger.severe("Resource not found: " + path);
++			throw new NullPointerException("Resource not found: " + path);
++		} else {
++			return (new ImageIcon(imageURL, description)).getImage();
++		}
++	}
++
++	private void addTray() {
++		try {
++			if(trayIcon == null) {
++				createTray();
++			}
++			tray.add(trayIcon);
++		} catch (AWTException e) {
++			System.out.println("TrayIcon could not be added.");
++			return;
+ 		}
+-	    }
+-	};
+-	
+-	openItem.addActionListener(listener);
+-	pushItem.addActionListener(listener);
+-	aboutItem.addActionListener(listener);
+-	
+-	exitItem.addActionListener(new ActionListener() {
+-	    @Override
+-	    public void actionPerformed(ActionEvent e) {
+-		tray.remove(trayIcon);
+-		if(FolderManager.isWindows())
+-		    JIntellitype.getInstance().cleanUp();
+-		System.exit(0);
+-	    }
+-	});
+-    }
+-    
+-    protected void openMainWindow() {
+-	SwingUtilities.invokeLater(new Runnable() {
+-	    public void run() {
+-		if(frame == null)
+-		    frame = new MainFrame(instance);
+-		frame.setVisible(true);
+-	    }
+-	});
+-    }
+-    public void openSettingsWindow() {
+-	SwingUtilities.invokeLater(new Runnable() {
+-	    public void run() {
+-		if(sframe == null)
+-		    sframe = new SettingsFrame(instance);
+-		sframe.setVisible(true);
+-	    }
+-	});
+-    }
+-    
+-    /**
+-     * Obtain the image from inside the jar
+-     *
+-     * @param path
+-     * @param description
+-     * @return
+-     */
+-    protected static Image createImage(String path, String description) {
+-	URL imageURL = TeamScreenDaemon.class.getResource(path);
+-	
+-	if (imageURL == null) {
+-	    TeamScreenDaemon.logger.severe("Resource not found: " + path);
+-	    throw new NullPointerException("Resource not found: " + path);
+-	} else {
+-	    return (new ImageIcon(imageURL, description)).getImage();
+ 	}
+-    }
+-    
+-    private void addTray() {
+-	try {
+-	    if(trayIcon == null) {
+-		createTray();
+-	    }
+-	    tray.add(trayIcon);
+-	} catch (AWTException e) {
+-	    System.out.println("TrayIcon could not be added.");
+-	    return;
++
++	@Override
++	public synchronized void keyPressed(KeyEvent e) {
++		this.keysPressed.add(e.getKeyChar());
++		if (this.keysPressed.size() > 1) {
++			// More than one key is currently pressed.
++			// Iterate over pressed to get the keys.
++		}
+ 	}
+-    }
+-    
+-    @Override
+-    public synchronized void keyPressed(KeyEvent e) {
+-	this.keysPressed.add(e.getKeyChar());
+-	if (this.keysPressed.size() > 1) {
+-	    // More than one key is currently pressed.
+-	    // Iterate over pressed to get the keys.
++
++	@Override
++	public synchronized void keyReleased(KeyEvent e) {
++		;
++
+ 	}
+-    }
+-    
+-    @Override
+-    public synchronized void keyReleased(KeyEvent e) {
+-	;
+-	
+-    }
+-    
+-    @Override
+-    public void keyTyped(KeyEvent e) {
+-	;
+-    }
+-    
+-    @Override
+-    public void onHotKey(int identifier) {
+-	if(enabled)
+-	    if (identifier == 1) {
+-		//User wants to share :D
+-		openWindowSelect();
+-	    }
+-	
+-    }
+-    
+-    public void openPushSelect(final WindowInfo window) {
+-	SwingUtilities.invokeLater(new Runnable() {
+-	    @Override
+-	    public void run() {
+-		pSelect = new PushSelect(instance, window);
+-		pSelect.setVisible(true);
+-		windowPushed = window;
+-	    }
+-	});
+-    }
+-    public void openWindowSelect() {
+-	// Create the GUI on the event-dispatching thread
+-	SwingUtilities.invokeLater(new Runnable() {
+-	    @Override
+-	    public void run() {
+-		wSelect = new WindowSelect(instance);
+-		wSelect.setVisible(true);
+-	    }
+-	});
+-    }
+-    
+-    public static WindowManager getWindowManager() {
+-	return wManager;
+-    }
+-    
+-    public static void nullifyWindows() {
+-	wSelect = null;
+-	pSelect = null;
+-	frame = null;
+-	sframe = null;
+-    }
+-    
+-    @Override
+-    public void shutDownProgram()
+-    {
+-	// TODO Shut down without using System.exit();
+-	
+-    }
+-    
++
++	@Override
++	public void keyTyped(KeyEvent e) {
++		;
++	}
++
++	@Override
++	public void onHotKey(int identifier) {
++		if(enabled)
++			if (identifier == 1) {
++				//User wants to share :D
++				openWindowSelect();
++			}
++
++	}
++
++	public void openPushSelect(final WindowInfo window) {
++		SwingUtilities.invokeLater(new Runnable() {
++			@Override
++			public void run() {
++				pSelect = new PushSelect(instance, window);
++				pSelect.setVisible(true);
++				windowPushed = window;
++			}
++		});
++	}
++	public void openWindowSelect() {
++		// Create the GUI on the event-dispatching thread
++		SwingUtilities.invokeLater(new Runnable() {
++			@Override
++			public void run() {
++				wSelect = new WindowSelect(instance);
++				wSelect.setVisible(true);
++			}
++		});
++	}
++
++	public static WindowManager getWindowManager() {
++		return wManager;
++	}
++
++	public static void nullifyWindows() {
++		wSelect = null;
++		pSelect = null;
++		frame = null;
++		sframe = null;
++	}
++
++	@Override
++	public void shutDownProgram()
++	{
++		// TODO Shut down without using System.exit();
++	}
++
++	public static PropertiesHandler getPropertiesHandler() {
++		return TeamScreenDaemon.properties;
++	}
++
+ }
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JNeighborDisplayPanel.java b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JNeighborDisplayPanel.java
+index d9aaac3..c22f0c9 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JNeighborDisplayPanel.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JNeighborDisplayPanel.java
+@@ -41,13 +41,13 @@ public class JNeighborDisplayPanel extends JPanel{
+ 	
+ 	protected HashMap<String, String> getConfigData() {
+ 		try {
+-			String rightData = TeamScreenDaemon.properties.getConfig().getProperty("RNeighbor");
+-			String leftData = TeamScreenDaemon.properties.getConfig().getProperty("LNeighbor");
+-			String topData = TeamScreenDaemon.properties.getConfig().getProperty("TNeighbor");
+-			String bottomData = TeamScreenDaemon.properties.getConfig().getProperty("BNeighbor");
+-			String projectorData = TeamScreenDaemon.properties.getConfig().getProperty("PNeighbor");
++			String rightData = TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("RNeighbor");
++			String leftData = TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("LNeighbor");
++			String topData = TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("TNeighbor");
++			String bottomData = TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("BNeighbor");
++			String projectorData = TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("PNeighbor");
+ 			String centerData = InetAddress.getLocalHost().getHostName() + ":" + InetAddress.getLocalHost().getHostAddress() + ":" +
+-					TeamScreenDaemon.properties.getConfig().getProperty("Slot");
++					TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("Slot");
+ 			
+ 			HashMap<String, String> returnMap = new HashMap<String, String>();
+ 			
+@@ -67,15 +67,15 @@ public class JNeighborDisplayPanel extends JPanel{
+ 	}
+ 	public void saveDataToConfig(HashMap<String, String> newData) {
+ 		try {
+-			TeamScreenDaemon.properties.getConfig().setProperty("RNeighbor", newData.get("Right"));
+-			TeamScreenDaemon.properties.getConfig().setProperty("LNeighbor", newData.get("Left"));
+-			TeamScreenDaemon.properties.getConfig().setProperty("TNeighbor", newData.get("Top"));
+-			TeamScreenDaemon.properties.getConfig().setProperty("BNeighbor", newData.get("Bottom"));
+-			TeamScreenDaemon.properties.getConfig().setProperty("PNeighbor", newData.get("Projector"));
+-			TeamScreenDaemon.properties.getConfig().setProperty("Name", newData.get("Center").split(":")[0]);
+-			TeamScreenDaemon.properties.getConfig().setProperty("Slot", newData.get("Center").split(":")[2]);
++			TeamScreenDaemon.getPropertiesHandler().getConfig().setProperty("RNeighbor", newData.get("Right"));
++			TeamScreenDaemon.getPropertiesHandler().getConfig().setProperty("LNeighbor", newData.get("Left"));
++			TeamScreenDaemon.getPropertiesHandler().getConfig().setProperty("TNeighbor", newData.get("Top"));
++			TeamScreenDaemon.getPropertiesHandler().getConfig().setProperty("BNeighbor", newData.get("Bottom"));
++			TeamScreenDaemon.getPropertiesHandler().getConfig().setProperty("PNeighbor", newData.get("Projector"));
++			TeamScreenDaemon.getPropertiesHandler().getConfig().setProperty("Name", newData.get("Center").split(":")[0]);
++			TeamScreenDaemon.getPropertiesHandler().getConfig().setProperty("Slot", newData.get("Center").split(":")[2]);
+ 			
+-			TeamScreenDaemon.properties.saveConfig();
++			TeamScreenDaemon.getPropertiesHandler().saveConfig();
+ 			
+ 			TeamScreenDaemon.logger.info("Configuration saved successfully");
+ 			
+-- 
+2.39.5 (Apple Git-154)
+

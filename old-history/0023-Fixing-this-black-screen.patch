@@ -1,0 +1,65 @@
+From afc7f89f1adc6097dd7a3c666c40de1c4fabaffc Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 6 Apr 2014 22:13:00 -0600
+Subject: [PATCH 023/101] Fixing this black screen...
+
+---
+ .../TeamScreen/Net/jrc/JRCWindowFrame.java    | 23 ++++++++++---------
+ 1 file changed, 12 insertions(+), 11 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCWindowFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCWindowFrame.java
+index 2b27772..8198c52 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCWindowFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCWindowFrame.java
+@@ -27,12 +27,12 @@ public class JRCWindowFrame extends JFrame implements RemoteControlClient {
+ 	public JRCWindowFrame(JRCClient controller) {
+ 		this.controller = controller;
+ 		
+-		viewIcon = new ImageIcon( ImageFactory.loadImage("jar://images/teamscreen.png") );
++		this.viewIcon = new ImageIcon( ImageFactory.loadImage("jar://images/teamscreen.png") );
+ 		
+-		picLabel = new JLabel(viewIcon);
+-		add(picLabel);
++		this.picLabel = new JLabel(this.viewIcon);
++		add(this.picLabel);
+ 		
+-		this.setSize(picLabel.getSize());
++		this.setSize(this.picLabel.getSize());
+ 		this.setVisible(true);
+ 		this.pack();
+ 		this.setResizable(true);
+@@ -45,15 +45,16 @@ public class JRCWindowFrame extends JFrame implements RemoteControlClient {
+ 			return;
+ 		}
+ 		
+-		viewIcon.setImage(image);
+-		picLabel.setIcon(viewIcon);
++		this.viewIcon.setImage(image);
++		this.picLabel.setIcon(this.viewIcon);
+ 		
+-		if(firstFrame && image.getWidth(this)!=-1 && image.getHeight(this)!=-1)
++		if(this.firstFrame && image.getWidth(this)!=-1 && image.getHeight(this)!=-1)
+ 		{
+-			controller.doLayout();
+-			firstFrame=false;
++			this.controller.doLayout();
++			this.firstFrame=false;
+ 		}
+-		this.setSize(new Dimension(viewIcon.getIconWidth(), viewIcon.getIconHeight()));
++		this.setSize(new Dimension(this.viewIcon.getIconWidth(), this.viewIcon.getIconHeight()));
++		this.picLabel.repaint();
+ 		this.repaint(0);
+ 	}
+ 	@Override
+@@ -62,7 +63,7 @@ public class JRCWindowFrame extends JFrame implements RemoteControlClient {
+ 	}
+ 	@Override
+ 	public void newFrame() {
+-		controller.requestNextFrame();
++		this.controller.requestNextFrame();
+ 	}
+ 	@Override
+ 	public void setFullscreen(boolean state) {
+-- 
+2.39.5 (Apple Git-154)
+

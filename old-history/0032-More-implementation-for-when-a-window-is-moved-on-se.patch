@@ -1,0 +1,315 @@
+From 9bd5982645f9b7b255747027cdb825f0afa799ae Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Mon, 7 Apr 2014 21:01:47 -0600
+Subject: [PATCH 032/101] More implementation for when a window is moved on
+ server, more fixes with the mouse on client side. Added ESC key close on
+ WindowSelect and PushSelect windows
+
+---
+ .../TeamScreen/Net/jrc/JRCClient.java         |  6 ++--
+ .../Net/jrc/JRCClientWindowFrame.java         | 15 ++++++++--
+ .../Net/jrc/JRCServerApplication.java         | 30 +++++++++++++++----
+ .../Net/jrc/WindowControlAdapter.java         |  2 +-
+ .../Net/jrc/WindowScreenRecorder.java         |  2 +-
+ .../TeamScreen/Window/PushSelect.java         | 19 +++++++++++-
+ .../TeamScreen/Window/Util/WindowUtil.java    | 10 +++++++
+ .../TeamScreen/Window/WindowSelect.java       | 18 ++++++++++-
+ 8 files changed, 87 insertions(+), 15 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
+index 74717fb..685625f 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
+@@ -157,9 +157,9 @@ public class JRCClient extends Thread implements RemoteClientController,MouseLis
+ 			HubHelper.writeLine("fullControl",this.controlConnection.getOutputStream());
+ 			TeamScreenDaemon.logger.info("Full Control request sent.");
+ 
+-			this.client.getView().addMouseListener(this);
+-			this.client.getView().addMouseMotionListener(this);
+-			this.client.getView().addKeyListener(this);
++			this.client.picLabel.addMouseListener(this);
++			this.client.picLabel.addMouseMotionListener(this);
++			this.client.picLabel.addKeyListener(this);
+ 		
+ 			System.out.println("Screen Player Started");
+ 			
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
+index aaa9df0..de6b1bf 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
+@@ -3,6 +3,8 @@ package com.aptitekk.TeamScreen.Net.jrc;
+ import java.awt.Component;
+ import java.awt.Dimension;
+ import java.awt.Image;
++import java.awt.event.WindowAdapter;
++import java.awt.event.WindowEvent;
+ 
+ import javax.swing.ImageIcon;
+ import javax.swing.JFrame;
+@@ -21,12 +23,19 @@ public class JRCClientWindowFrame extends JFrame implements RemoteControlClient
+ 	
+ 	private JRCClient controller;
+ 	private ImageIcon viewIcon;
+-	private JLabel picLabel;
++	public JLabel picLabel;
+ 	private boolean firstFrame = true;
+ 	
+-	public JRCClientWindowFrame(JRCClient controller, String title) {
++	public JRCClientWindowFrame(final JRCClient controller, String title) {
+ 		this.controller = controller;
+ 		
++		addWindowListener(new WindowAdapter() {
++			@Override
++			public void windowClosing(WindowEvent e) {
++				controller.disconnect();
++			}
++		});
++		
+ 		this.setTitle(title + " - TeamScreen");
+ 		
+ 		this.viewIcon = new ImageIcon( ImageFactory.loadImage("jar://images/teamscreen.png") );
+@@ -34,7 +43,7 @@ public class JRCClientWindowFrame extends JFrame implements RemoteControlClient
+ 		this.picLabel = new JLabel(this.viewIcon);
+ 		add(this.picLabel);
+ 		
+-		this.setSize(this.picLabel.getSize());
++		this.setSize(this.picLabel.getSize().width, this.picLabel.getSize().height+60);
+ 		this.setVisible(true);
+ 		this.pack();
+ 		this.setResizable(true);
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCServerApplication.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCServerApplication.java
+index 40a88c7..809e51b 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCServerApplication.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCServerApplication.java
+@@ -16,6 +16,8 @@ import org.one.stone.soup.screen.recorder.ScreenRecorderListener;
+ import com.aptitekk.TeamScreen.TeamScreenDaemon;
+ import com.aptitekk.TeamScreen.Net.Broadcaster.TeamScreenBroadcastThread;
+ import com.aptitekk.TeamScreen.Util.WindowInfo;
++import com.aptitekk.TeamScreen.Window.Util.WindowUtil;
++import com.aptitekk.TeamScreen.Window.Util.WindowUtil.WindowNotFoundException;
+ 
+ /**
+  * Java Remote Control Server Application
+@@ -25,15 +27,18 @@ import com.aptitekk.TeamScreen.Util.WindowInfo;
+  */
+ public class JRCServerApplication extends Thread implements RemoteControlServerApplication{
+ 	
+-	WindowInfo window;
++	private static WindowInfo window;
+ 	private RemoteControlServer server;
+ 	private boolean serverRunning = false;
++	private static boolean threadRunning = false;
++	
++	private Thread windowUpdater;
+ 	
+ 	private WindowControlAdapter controlAdapter;
+ 	private ScreenRecorder screenRecorder;
+ 	
+ 	public JRCServerApplication(WindowInfo w) {
+-		this.window = w;
++		JRCServerApplication.window = w;
+ 	}
+ 
+ 	@Override
+@@ -49,7 +54,21 @@ public class JRCServerApplication extends Thread implements RemoteControlServerA
+ 	
+ 	@Override
+ 	public void run() {
++		JRCServerApplication.threadRunning = true;
+ 		try {
++			this.windowUpdater = new Thread() {
++				public void run() {
++					try {
++						while(threadRunning)
++							window = WindowUtil.updateWindow(window);
++						this.interrupt();
++					} catch (WindowNotFoundException exception) {
++						exception.printStackTrace();
++						this.interrupt();
++					}
++				}
++			};
++			this.windowUpdater.start();
+ 			startServer();
+ 		} catch (Exception exception) {
+ 			TeamScreenDaemon.logger.severe("Could not start JRC server");
+@@ -59,6 +78,7 @@ public class JRCServerApplication extends Thread implements RemoteControlServerA
+ 	
+ 	@Override
+ 	public void interrupt() {
++		threadRunning = false;
+ 		stopServer();
+ 		super.interrupt();
+ 	}
+@@ -98,14 +118,14 @@ public class JRCServerApplication extends Thread implements RemoteControlServerA
+ 	}
+ 	
+ 	private ControlAdapter createControlAdapter() {
+-		this.controlAdapter = new WindowControlAdapter(this.window);
++		this.controlAdapter = new WindowControlAdapter(JRCServerApplication.window);
+ 		return this.controlAdapter;
+ 	}
+ 
+ 	@Override
+ 	public ScreenRecorder getScreenRecorder(OutputStream outputStream,
+ 			ScreenRecorderListener listener) {
+-		return new WindowScreenRecorder(outputStream, listener, this.window);
++		return new WindowScreenRecorder(outputStream, listener, JRCServerApplication.window);
+ 	}
+ 	
+ 	private void initialiseServer() throws Exception
+@@ -130,7 +150,7 @@ public class JRCServerApplication extends Thread implements RemoteControlServerA
+ 	}
+ 
+ 	public void updateWindowRect(WindowInfo info) {
+-		this.window = info;
++		JRCServerApplication.window = info;
+ 		this.controlAdapter.updateWindow(info);
+ 	}
+ 
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowControlAdapter.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowControlAdapter.java
+index 7363d7a..fa5143c 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowControlAdapter.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowControlAdapter.java
+@@ -49,7 +49,7 @@ public class WindowControlAdapter implements ControlAdapter {
+ 
+ 	@Override
+ 	public void mouseMove(int x, int y) {
+-		this.robot.mouseMove(getWindowRect().x+x,getWindowRect().y+y-60);
++		this.robot.mouseMove(getWindowRect().x+x,getWindowRect().y+y);
+ 	}
+ 
+ 	@Override
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowScreenRecorder.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowScreenRecorder.java
+index ec415bf..9043a29 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowScreenRecorder.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/WindowScreenRecorder.java
+@@ -74,7 +74,7 @@ public class WindowScreenRecorder extends ScreenRecorder{
+ 		Polygon pointerShadow = new Polygon(new int[]{6,21,16,14},new int[]{1,9,11,17},4);
+ 		
+ 		Graphics2D grfx = image.createGraphics();
+-		grfx.translate(mousePosition.x,mousePosition.y);
++		grfx.translate(mousePosition.x-getWindowRect().x,mousePosition.y-getWindowRect().y);
+ 		grfx.setColor( new Color(100,100,100,100) );
+ 		grfx.fillPolygon( pointerShadow );
+ 		grfx.setColor( new Color(100,100,255,200) );
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/PushSelect.java b/TeamScreen/src/com/aptitekk/TeamScreen/Window/PushSelect.java
+index 3408588..0439d0d 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Window/PushSelect.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Window/PushSelect.java
+@@ -7,6 +7,8 @@ import java.awt.GridBagConstraints;
+ import java.awt.GridBagLayout;
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
++import java.awt.event.KeyEvent;
++import java.awt.event.KeyListener;
+ 
+ import javax.swing.BorderFactory;
+ import javax.swing.JFrame;
+@@ -23,7 +25,7 @@ import com.aptitekk.TeamScreen.Window.Util.JArrowButton;
+  * @author kevint.
+  *         Created Apr 6, 2014.
+  */
+-public class PushSelect extends JFrame implements ActionListener {
++public class PushSelect extends JFrame implements ActionListener, KeyListener {
+ 	
+ 	TeamScreenDaemon master;
+ 	WindowInfo window;
+@@ -47,6 +49,8 @@ public class PushSelect extends JFrame implements ActionListener {
+ 	    
+ 	    initGui();
+ 	    
++	    this.addKeyListener(this);
++	    
+ 	    this.pack();
+ 	    this.setVisible(true);
+ 	    this.repaint();
+@@ -139,4 +143,17 @@ public class PushSelect extends JFrame implements ActionListener {
+ 		}
+ 	}
+ 
++	@Override
++	public void keyPressed(KeyEvent e) {;}
++
++	@Override
++	public void keyReleased(KeyEvent e) {
++		if(e.getKeyCode() == KeyEvent.VK_ESCAPE) {
++			this.dispose();
++		}
++	}
++
++	@Override
++	public void keyTyped(KeyEvent e) {;}
++
+ }
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/WindowUtil.java b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/WindowUtil.java
+index 0497f7a..0cf6122 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/WindowUtil.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/WindowUtil.java
+@@ -160,5 +160,15 @@ public class WindowUtil {
+ 		}      
+ 		return null;
+ 	}
++	
++	public synchronized static WindowInfo updateWindow(WindowInfo w) throws WindowNotFoundException {
++		List<WindowInfo> windows = getWindows();
++		for(WindowInfo window : windows) {
++			if(window.getTitle().equals(w.getTitle())) {
++				return window;
++			}
++		}
++		throw new WindowNotFoundException("", w.getTitle());
++	}
+ 
+ }
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/WindowSelect.java b/TeamScreen/src/com/aptitekk/TeamScreen/Window/WindowSelect.java
+index b781df9..213fa49 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Window/WindowSelect.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Window/WindowSelect.java
+@@ -5,6 +5,8 @@ import java.awt.Color;
+ import java.awt.Dimension;
+ import java.awt.Point;
+ import java.awt.Window;
++import java.awt.event.KeyEvent;
++import java.awt.event.KeyListener;
+ import java.awt.event.MouseEvent;
+ import java.awt.event.MouseListener;
+ 
+@@ -22,7 +24,7 @@ import com.aptitekk.TeamScreen.Window.Util.WindowUtil;
+  * @author kevint.
+  *         Created Apr 5, 2014.
+  */
+-public class WindowSelect extends JFrame implements MouseListener{
++public class WindowSelect extends JFrame implements MouseListener, KeyListener{
+ 
+ 	TeamScreenDaemon master;
+ 	
+@@ -41,6 +43,7 @@ public class WindowSelect extends JFrame implements MouseListener{
+ 	    this.pack();
+ 	    this.setVisible(true);
+ 	    this.addMouseListener(this);
++	    this.addKeyListener(this);
+ 	}
+ 	
+ 	private void initGui() {
+@@ -121,4 +124,17 @@ public class WindowSelect extends JFrame implements MouseListener{
+ 	@Override
+ 	public void mouseReleased(MouseEvent e) {
+ 	}
++
++	@Override
++	public void keyPressed(KeyEvent e) {;}
++
++	@Override
++	public void keyReleased(KeyEvent e) {
++		if(e.getKeyCode() == KeyEvent.VK_ESCAPE) {
++			this.dispose();
++		}
++	}
++
++	@Override
++	public void keyTyped(KeyEvent arg0) {;}
+ }
+-- 
+2.39.5 (Apple Git-154)
+

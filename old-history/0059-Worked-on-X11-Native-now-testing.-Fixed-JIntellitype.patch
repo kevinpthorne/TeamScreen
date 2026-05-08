@@ -1,0 +1,101 @@
+From 5dd5963654526e8960cd2ba4d76ab52ef885d6f6 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Thu, 24 Jul 2014 15:55:49 -0600
+Subject: [PATCH 059/101] Worked on X11 Native, now testing. Fixed JIntellitype
+ to only run on Windows
+
+---
+ .../aptitekk/TeamScreen/JNA/X11Native.java    | 14 +++++-----
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java | 27 +++++++++++--------
+ 2 files changed, 23 insertions(+), 18 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
+index cd008fc..b211f58 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/JNA/X11Native.java
+@@ -27,10 +27,10 @@ public class X11Native extends WindowManager {
+ 	public List<WindowInfo> getWindows() {
+ 		final List<WindowInfo> inflList = new ArrayList<WindowInfo>();
+ 
+-		WindowByReference parent= null;
+-		X11.WindowByReference root= null;
+-	    PointerByReference children= null;
+-	    IntByReference nNumChildren = null;
++		WindowByReference parent= new WindowByReference();
++		WindowByReference root  = new WindowByReference();
++	    PointerByReference children = new PointerByReference();
++	    IntByReference nNumChildren = new IntByReference();
+ 	    
+ 
+ 	    int status = X11Ext.instance.XQueryTree(X11Ext.x11Display, 
+@@ -91,8 +91,8 @@ public class X11Native extends WindowManager {
+ 	}
+ 	
+ 	private WindowInfo getWindow(X11.Display display, X11.Window window) {
+-		XTextProperty wmName = null;
+-	    XWindowAttributes wmInfo = null;
++		XTextProperty wmName = new XTextProperty();
++	    XWindowAttributes wmInfo = new XWindowAttributes();
+ 
+ 	    int status = X11Ext.instance.XGetWMName(display, 
+ 	    		window, 
+@@ -132,7 +132,7 @@ public class X11Native extends WindowManager {
+ 	private int[] getRect(int hwnd) throws WindowNotFoundException,
+ 	GetWindowRectException {
+ 		RECT r = new RECT();
+-		X11.XWindowAttributes windowAttrib = null;
++		X11.XWindowAttributes windowAttrib = new XWindowAttributes();
+ 		int result = X11Ext.instance.XGetWindowAttributes(X11Ext.x11Display, new X11.Window(hwnd), windowAttrib);
+ 		if(result == 0) {
+ 			throw new GetWindowRectException("" + hwnd);
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index 5479dd0..5779a43 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -110,16 +110,15 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 					logger.severe("Could not create log file, not storing logs. Caused by: " + exception.getCause());
+ 				}
+ 			}
+-			
+-			JIntellitype.getInstance();
+-			//JIntellitype.getInstance().registerHotKey(1, Integer.valueOf(properties.getConfig().getProperty("KeyStroke")).intValue()
+-			//		, Integer.valueOf(properties.getConfig().getProperty("KeyStrokeEnd")).intValue());
+-
+-			JIntellitype.getInstance().registerHotKey(1, JIntellitype.MOD_CONTROL + JIntellitype.MOD_SHIFT, (int)'1');
+-			JIntellitype.getInstance().addHotKeyListener(this);
++			//register window managers and hotkey managers
+ 			
+ 			if(FolderManager.isWindows()) {
+ 				wManager = new WindowsNative(); logger.info("Windows Detected");
++				JIntellitype.getInstance();
++				//JIntellitype.getInstance().registerHotKey(1, Integer.valueOf(properties.getConfig().getProperty("KeyStroke")).intValue()
++				//		, Integer.valueOf(properties.getConfig().getProperty("KeyStrokeEnd")).intValue());
++				JIntellitype.getInstance().registerHotKey(1, JIntellitype.MOD_CONTROL + JIntellitype.MOD_SHIFT, (int)'1');
++				JIntellitype.getInstance().addHotKeyListener(this);
+ 			} else if(FolderManager.isMac()) {
+ 				 logger.info("Mac OS X detected"); throw new NotImplementedException("Mac is not supported yet.");
+ 			} else if(FolderManager.isUnix()) {
+@@ -144,10 +143,16 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener{
+ 			JIntellitype.getInstance().cleanUp();
+ 			System.exit(0);
+ 		} catch (JIntellitypeException e) {
+-			JOptionPane.showMessageDialog(null,
+-				    "TeamScreen is already running!",
+-				    "Redundant Process",
+-				    JOptionPane.ERROR_MESSAGE);
++			if(FolderManager.isWindows())
++				JOptionPane.showMessageDialog(null,
++					    "TeamScreen is already running!",
++					    "Redundant Process",
++					    JOptionPane.ERROR_MESSAGE);
++			else
++				JOptionPane.showMessageDialog(null,
++					    "TeamScreen was confused on whether you were running Windows or not...",
++					    "Well, this is embarrassing",
++					    JOptionPane.ERROR_MESSAGE);
+ 			System.exit(0);
+ 		} catch (NotImplementedException e) {
+ 			JOptionPane.showMessageDialog(null,
+-- 
+2.39.5 (Apple Git-154)
+

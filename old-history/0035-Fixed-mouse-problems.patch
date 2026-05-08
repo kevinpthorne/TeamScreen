@@ -1,0 +1,60 @@
+From 49d42959689c37c84be3942085d566488f608dec Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 13 Apr 2014 15:58:04 -0600
+Subject: [PATCH 035/101] Fixed mouse problems!
+
+---
+ .../TeamScreen/Net/jrc/DynamicJRCServerApplication.java        | 2 ++
+ TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java  | 1 -
+ .../com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java  | 3 +++
+ 3 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+index 14210d7..01bf683 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/DynamicJRCServerApplication.java
+@@ -64,6 +64,8 @@ public class DynamicJRCServerApplication extends Thread {
+ 							window = WindowUtil.updateWindow(window);
+ 							if(screenRecorder != null)
+ 								screenRecorder.updateWindow(window);
++							if(controlAdapter != null)
++								controlAdapter.updateWindow(window);
+ 						} catch (WindowNotFoundException e) {
+ 							//e.printStackTrace();
+ 							break;
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
+index 17bebe0..685625f 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClient.java
+@@ -256,7 +256,6 @@ public class JRCClient extends Thread implements RemoteClientController,MouseLis
+ 		packet.addAttribute("x",""+e.getX());
+ 		packet.addAttribute("y",""+e.getY());
+ 		sendCommand(packet);
+-		System.out.println(e.getX() +","+ e.getY());
+ 	}
+ 
+ 	@Override
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
+index de6b1bf..163796b 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/jrc/JRCClientWindowFrame.java
+@@ -6,6 +6,7 @@ import java.awt.Image;
+ import java.awt.event.WindowAdapter;
+ import java.awt.event.WindowEvent;
+ 
++import javax.swing.BoxLayout;
+ import javax.swing.ImageIcon;
+ import javax.swing.JFrame;
+ import javax.swing.JLabel;
+@@ -43,6 +44,8 @@ public class JRCClientWindowFrame extends JFrame implements RemoteControlClient
+ 		this.picLabel = new JLabel(this.viewIcon);
+ 		add(this.picLabel);
+ 		
++		this.setLayout(new BoxLayout(this, BoxLayout.PAGE_AXIS));
++		
+ 		this.setSize(this.picLabel.getSize().width, this.picLabel.getSize().height+60);
+ 		this.setVisible(true);
+ 		this.pack();
+-- 
+2.39.5 (Apple Git-154)
+

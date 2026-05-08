@@ -1,0 +1,80 @@
+From 921f1b53c16db4e8710126f2c976a6877c631143 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Sun, 13 Apr 2014 20:04:02 -0600
+Subject: [PATCH 041/101] Added an X button on the push select screen
+
+---
+ .../src/com/aptitekk/TeamScreen/Window/PushSelect.java    | 8 ++++++++
+ .../com/aptitekk/TeamScreen/Window/Util/JArrowButton.java | 3 +++
+ 2 files changed, 11 insertions(+)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/PushSelect.java b/TeamScreen/src/com/aptitekk/TeamScreen/Window/PushSelect.java
+index 0439d0d..4c13b87 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Window/PushSelect.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Window/PushSelect.java
+@@ -35,6 +35,7 @@ public class PushSelect extends JFrame implements ActionListener, KeyListener {
+ 	JArrowButton btneast;
+ 	JArrowButton btnwest;
+ 	JArrowButton btndisplay;
++	JArrowButton btnexit;
+ 	
+ 	public PushSelect(TeamScreenDaemon master, WindowInfo window) {
+ 		
+@@ -67,12 +68,14 @@ public class PushSelect extends JFrame implements ActionListener, KeyListener {
+ 		btnwest = new JArrowButton(JArrowButton.WEST);
+ 		btneast = new JArrowButton(JArrowButton.EAST);
+ 		btndisplay = new JArrowButton(JArrowButton.SPECIAL);
++		btnexit = new JArrowButton(JArrowButton.X);
+ 		
+ 		btnnorth.addActionListener(this);
+ 		btnsouth.addActionListener(this);
+ 		btnwest.addActionListener(this);
+ 		btneast.addActionListener(this);
+ 		btndisplay.addActionListener(this);
++		btnexit.addActionListener(this);
+ 		
+ 		top.add(btndisplay);
+ 		top.add(btnnorth);
+@@ -108,6 +111,8 @@ public class PushSelect extends JFrame implements ActionListener, KeyListener {
+ 		center.add(infoText, c);
+ 		c.gridy = 1;
+ 		center.add(windowTitle,c);
++		c.gridy = 2;
++		center.add(btnexit, c);
+ 		center.setVisible(true);
+ 		
+ 		this.add(pane);
+@@ -140,6 +145,9 @@ public class PushSelect extends JFrame implements ActionListener, KeyListener {
+ 			TeamScreenDaemon.windowPushed = this.window;
+ 			this.master.netHandler.requestConnecttoNeighbor(JArrowButton.EAST);
+ 			this.dispose();
++		} else if(e.getSource().equals(btnexit)) {
++			TeamScreenDaemon.logger.info("Canceled");
++			this.dispose();
+ 		}
+ 	}
+ 
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JArrowButton.java b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JArrowButton.java
+index f2104d9..1196a75 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JArrowButton.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Window/Util/JArrowButton.java
+@@ -19,6 +19,7 @@ public class JArrowButton extends JButton{
+ 	public static int SOUTH = 2;
+ 	public static int EAST = 3;
+ 	public static int WEST = 4;
++	public static int X = 5;
+ 	
+ 	public JArrowButton(int direction) {
+ 		super(getImagefromDirection(direction));
+@@ -40,6 +41,8 @@ public class JArrowButton extends JButton{
+ 			return new ImageIcon(FolderManager.createImage("/images/arrowwest.png", "west arrow"));
+ 		} else if(direction == SPECIAL) {
+ 			return new ImageIcon(FolderManager.createImage("/images/arrowdisplay.png", "special arrow"));
++		} else if(direction == X) {
++			return new ImageIcon(FolderManager.createImage("/images/x.png", "exit arrow"));
+ 		}
+ 		else {
+ 			return null;
+-- 
+2.39.5 (Apple Git-154)
+

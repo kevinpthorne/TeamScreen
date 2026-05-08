@@ -1,0 +1,258 @@
+From b68ed6c404ffa831652b1b4743bf68d4d3bfefff Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Fri, 1 Aug 2014 12:55:05 -0600
+Subject: [PATCH 090/101] Added local settings editing, added restart method
+
+---
+ .../TeamScreen/Frames/SettingsFrame.java      | 122 +++++++++++++++++-
+ .../aptitekk/TeamScreen/TeamScreenDaemon.java |  26 ++++
+ 2 files changed, 145 insertions(+), 3 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
+index 79249a4..e6ecf21 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Frames/SettingsFrame.java
+@@ -1,13 +1,20 @@
+ package com.aptitekk.TeamScreen.Frames;
+ 
++import java.awt.CardLayout;
+ import java.awt.Component;
+ import java.awt.Dimension;
++import java.awt.FlowLayout;
+ import java.awt.event.ActionEvent;
+ import java.awt.event.ActionListener;
++import java.io.IOException;
+ 
+ import javax.swing.BoxLayout;
+ import javax.swing.JButton;
++import javax.swing.JCheckBox;
++import javax.swing.JComboBox;
+ import javax.swing.JFrame;
++import javax.swing.JLabel;
++import javax.swing.JOptionPane;
+ import javax.swing.JPanel;
+ import javax.swing.JSeparator;
+ import javax.swing.SwingConstants;
+@@ -28,15 +35,30 @@ public class SettingsFrame extends JFrame implements ActionListener {
+ 	
+ 	TeamScreenDaemon master;
+ 	
++	JPanel cardPanel;
++	
++	JPanel localSettingsPane;
++	JPanel topRow;
++	JPanel bottomRow;
++	JCheckBox autoUpdate;
++	JCheckBox log;
++	JComboBox<String> notificationLevel;
++	JComboBox<String> slot;
++	
+ 	JButton configure;
+ 	JNeighborDisplayPanel neighborPanel;
+ 	JPanel mainPane = new JPanel();
+ 	JButton close;
++	JButton more;
+ 	JButton exit;
+ 	JButton save;
+ 	
+ 	ConfigureNeighbor subframe;
+ 	
++	final static String NEIGHBORPANEL = "nP";
++	final static String LOCALPANEL = "lP";
++	boolean localPanelShowing = false;
++	
+ 	public SettingsFrame(TeamScreenDaemon master) {
+ 		this.master = master;
+ 		
+@@ -56,8 +78,47 @@ public class SettingsFrame extends JFrame implements ActionListener {
+ 	
+ 	private void initGui() {
+ 		this.mainPane.setLayout(new BoxLayout(this.mainPane, BoxLayout.PAGE_AXIS));
++		
++		this.cardPanel = new JPanel();
++		this.cardPanel.setLayout(new CardLayout());
++		
+ 		this.neighborPanel = new JNeighborDisplayPanel();
+-		this.mainPane.add(this.neighborPanel);
++		
++		this.localSettingsPane = new JPanel();
++		this.localSettingsPane.setLayout(new BoxLayout(this.localSettingsPane, BoxLayout.PAGE_AXIS));
++		this.topRow = new JPanel(new FlowLayout());
++		this.autoUpdate = new JCheckBox("Auto Update");
++		this.log = new JCheckBox("Log");
++		this.topRow.add(autoUpdate);
++		this.topRow.add(log);
++		this.bottomRow = new JPanel(new FlowLayout());
++		JPanel notifPanel = new JPanel();
++		JLabel notifLabel = new JLabel("Notification Level: ");
++		this.notificationLevel = new JComboBox<String>(new String[]{"info", "warning", "error"});
++		this.notificationLevel.setToolTipText("Sets the level to show notifications from the tray.");
++		this.notificationLevel.setEditable(false);
++		notifPanel.add(notifLabel);
++		notifPanel.add(this.notificationLevel);
++		JPanel slotPanel = new JPanel();
++		JLabel slotLabel = new JLabel("Slot: ");
++		this.slot = new JComboBox<String>(new String[]{"A","B","C","D","E","F"});
++		this.slot.setToolTipText("Sets slot you listen to for other TeamScreen users on the network");
++		this.slot.setEditable(false);
++		slotPanel.add(slotLabel);
++		slotPanel.add(this.slot);
++		this.bottomRow.add(notifPanel);
++		this.bottomRow.add(slotPanel);
++		this.localSettingsPane.add(this.topRow);
++		this.localSettingsPane.add(this.bottomRow);
++		this.localSettingsPane.add(new JLabel("A restart may be neccessary to apply new settings."));
++		
++		this.cardPanel.add(this.neighborPanel, NEIGHBORPANEL);
++		this.cardPanel.add(this.localSettingsPane, LOCALPANEL);
++		((CardLayout) this.cardPanel.getLayout()).show(this.cardPanel, NEIGHBORPANEL);
++		
++		this.mainPane.add(this.cardPanel);
++		
++		
+ 		
+ 		JPanel configPanel = new JPanel();
+ 		configPanel.setLayout(new BoxLayout(configPanel, BoxLayout.LINE_AXIS));
+@@ -74,12 +135,16 @@ public class SettingsFrame extends JFrame implements ActionListener {
+ 		bottomPanel.setLayout(new BoxLayout(bottomPanel, BoxLayout.LINE_AXIS));
+ 		this.close = new JButton("Close");
+ 		this.exit = new JButton("Exit");
++		this.more = new JButton("More >");
+ 		this.save = new JButton("Save");
+ 		this.close.addActionListener(this);
+ 		this.save.addActionListener(this);
++		this.more.addActionListener(this);
+ 		this.exit.addActionListener(this);
+ 		bottomPanel.add(this.save);
+ 		bottomPanel.add(new JPanel());
++		bottomPanel.add(this.more);
++		bottomPanel.add(new JPanel());
+ 		bottomPanel.add(this.close);
+ 		bottomPanel.add(new JPanel());
+ 		bottomPanel.add(this.exit);
+@@ -87,6 +152,32 @@ public class SettingsFrame extends JFrame implements ActionListener {
+ 		
+ 		this.add(this.mainPane);
+ 		this.pack();
++		
++		loadData();
++	}
++	
++	private void loadData() {
++		try {
++			this.autoUpdate.setSelected(Boolean.valueOf(TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("AutoUpdate")));
++			this.log.setSelected(Boolean.valueOf(TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("Log")));
++			this.slot.setSelectedItem(TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("Slot"));
++			this.notificationLevel.setSelectedItem(TeamScreenDaemon.getPropertiesHandler().getConfig().getProperty("NotificationLevel"));
++		} catch (IOException e) {
++			e.printStackTrace();
++		}
++	}
++	private void saveData() {
++		try {
++			TeamScreenDaemon.getPropertiesHandler().getConfig().setProperty("AutoUpdate", String.valueOf(this.autoUpdate.isSelected()));
++			TeamScreenDaemon.getPropertiesHandler().getConfig().setProperty("Log", String.valueOf(this.log.isSelected()));
++			TeamScreenDaemon.getPropertiesHandler().getConfig().setProperty("Slot", String.valueOf(this.slot.getSelectedItem()));
++			TeamScreenDaemon.getPropertiesHandler().getConfig().setProperty("NotificationLevel", 
++					String.valueOf(this.notificationLevel.getSelectedItem()));
++			TeamScreenDaemon.getPropertiesHandler().saveConfig();
++		} catch (IOException e) {
++			e.printStackTrace();
++		}
++		
+ 	}
+ 
+ 	@Override
+@@ -105,8 +196,33 @@ public class SettingsFrame extends JFrame implements ActionListener {
+                 }
+             });
+ 		} else if(e.getSource().equals(this.save)) {
+-			this.neighborPanel.saveDataToConfig(this.neighborPanel.getCurrentData());
+-			this.dispose();
++			int restart = JOptionPane.showOptionDialog(this, "Do you want to restart and apply settings?", 
++					"Restart required", JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE, null, null, null);
++			if(restart == JOptionPane.YES_OPTION) {
++				this.neighborPanel.saveDataToConfig(this.neighborPanel.getCurrentData());
++				this.saveData();
++				this.dispose();
++				this.master.restartApplication();
++			} else if(restart == JOptionPane.NO_OPTION) {
++				this.neighborPanel.saveDataToConfig(this.neighborPanel.getCurrentData());
++				this.saveData();
++				this.dispose();
++			} else {
++				return;
++			}
++			
++		} else if(e.getSource().equals(this.more)) {
++			if(!localPanelShowing) {
++				((CardLayout) this.cardPanel.getLayout()).show(this.cardPanel, LOCALPANEL);
++				localPanelShowing = true;
++				this.more.setText("< Back");
++				this.configure.setEnabled(false);
++			} else {
++				((CardLayout) this.cardPanel.getLayout()).show(this.cardPanel, NEIGHBORPANEL);
++				localPanelShowing = false;
++				this.more.setText("More >");
++				this.configure.setEnabled(true);
++			}
+ 		}
+ 	}
+ 
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index a62948b..135c80f 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -15,9 +15,12 @@ import java.awt.event.KeyEvent;
+ import java.awt.event.KeyListener;
+ import java.awt.event.MouseAdapter;
+ import java.awt.event.MouseEvent;
++import java.io.File;
+ import java.io.IOException;
+ import java.net.URI;
++import java.net.URISyntaxException;
+ import java.net.URL;
++import java.util.ArrayList;
+ import java.util.HashSet;
+ import java.util.Set;
+ import java.util.logging.ConsoleHandler;
+@@ -261,6 +264,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 		if(FolderManager.isWindows())
+ 			JIntellitype.getInstance().cleanUp();
+ 		this.netHandler.disable();
++		TeamScreenDaemon.nullifyWindows();
+ 		System.exit(0);
+ 	}
+ 	public boolean isEnabled() {
+@@ -483,6 +487,28 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 		if(FolderManager.isWindows())
+ 			JIntellitype.getInstance().cleanUp();
+ 		this.netHandler.disable();
++		TeamScreenDaemon.nullifyWindows();
++	}
++	public void restartApplication()
++	{
++		logger.info("Restart was called!");
++		try {
++			final String javaBin = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
++			final File currentJar = new File(TeamScreenDaemon.class.getProtectionDomain().getCodeSource().getLocation().toURI());
++			/* is it a jar file? */
++			if(!currentJar.getName().endsWith(".jar")) {
++				System.err.println("Jar was not found");
++				this.exit();
++			}
++			final ProcessBuilder builder = new ProcessBuilder(javaBin, "-jar", currentJar.getPath());
++			builder.start();
++			this.exit();
++		} catch (URISyntaxException | IOException e) {
++			e.printStackTrace();
++			logger.severe("Couldn't restart!");
++			TeamScreenDaemon.displayPopup(TeamScreenDaemon.trayIcon, "Error!",
++					"Could not restart TeamScreen!", TrayIcon.MessageType.ERROR);
++		}
+ 	}
+ 
+ 	public static PropertiesHandler getPropertiesHandler() {
+-- 
+2.39.5 (Apple Git-154)
+

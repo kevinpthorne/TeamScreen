@@ -1,0 +1,89 @@
+From 83c259b039599ac7b0c60ab1a7185fcfd920c2b0 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Mon, 7 Apr 2014 16:58:28 -0600
+Subject: [PATCH 030/101] Removed deprecated connecttoNeighbor function
+
+---
+ .../aptitekk/TeamScreen/Net/NetHandler.java   | 66 -------------------
+ 1 file changed, 66 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java b/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
+index d385b8c..b21088d 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/Net/NetHandler.java
+@@ -176,72 +176,6 @@ public class NetHandler {
+ 		}
+ 	}
+ 	
+-	public void connecttoNeighbor(int direction) {
+-		try{
+-			Properties prop = TeamScreenDaemon.properties.getConfig();
+-			List<String> slots = Arrays.asList(new String[]{"A","B","C","D","E","F"});
+-	        Integer[] ports = new Integer[]{4455, 4456, 4457, 4458, 4459, 4460};
+-			if(direction == JArrowButton.NORTH) {
+-				if(!prop.getProperty("TNeighbor").equals("")) {
+-					// [name]:[IP]:[slot]
+-					String[] info = prop.getProperty("TNeighbor").split(":");
+-					if(info.length != 3) {
+-						return;
+-					} else {
+-			            int port = ports[slots.indexOf(TeamScreenDaemon.properties.getConfig().getProperty("Slot"))];
+-						startNewJRCClient(info[1], port);
+-					}
+-				}
+-			} else if(direction == JArrowButton.SOUTH) {
+-				if(!prop.getProperty("BNeighbor").equals("")) {
+-					// [name]:[IP]:[slot]
+-					String[] info = prop.getProperty("BNeighbor").split(":");
+-					if(info.length != 3) {
+-						return;
+-					} else {
+-			            int port = ports[slots.indexOf(TeamScreenDaemon.properties.getConfig().getProperty("Slot"))];
+-						startNewJRCClient(info[1], port);
+-					}
+-				}
+-			} else if(direction == JArrowButton.EAST) {
+-				if(!prop.getProperty("RNeighbor").equals("")) {
+-					// [name]:[IP]:[slot]
+-					String[] info = prop.getProperty("RNeighbor").split(":");
+-					if(info.length != 3) {
+-						return;
+-					} else {
+-			            int port = ports[slots.indexOf(TeamScreenDaemon.properties.getConfig().getProperty("Slot"))];
+-						startNewJRCClient(info[1], port);
+-					}
+-				}
+-			} else if(direction == JArrowButton.WEST) {
+-				if(!prop.getProperty("LNeighbor").equals("")) {
+-					// [name]:[IP]:[slot]
+-					String[] info = prop.getProperty("LNeighbor").split(":");
+-					if(info.length != 3) {
+-						return;
+-					} else {
+-			            int port = ports[slots.indexOf(TeamScreenDaemon.properties.getConfig().getProperty("Slot"))];
+-						startNewJRCClient(info[1], port);
+-					}
+-				}
+-			} else if(direction == JArrowButton.SPECIAL) {
+-				if(!prop.getProperty("PNeighbor").equals("")) {
+-					// [name]:[IP]:[slot]
+-					String[] info = prop.getProperty("PNeighbor").split(":");
+-					if(info.length != 3) {
+-						return;
+-					} else {
+-			            int port = ports[slots.indexOf(TeamScreenDaemon.properties.getConfig().getProperty("Slot"))];
+-						startNewJRCClient(info[1], port);
+-					}
+-				}
+-			}
+-		} catch (Exception e) {
+-			e.printStackTrace();
+-		}
+-	}
+-	
+ 	public String getStackTrace(Throwable t) {
+         StringWriter stringWritter = new StringWriter();
+         PrintWriter printWritter = new PrintWriter(stringWritter, true);
+-- 
+2.39.5 (Apple Git-154)
+

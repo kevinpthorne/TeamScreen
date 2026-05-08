@@ -1,0 +1,28 @@
+From 29fc75e5d32d25683cf8144242d3656ebceb1be2 Mon Sep 17 00:00:00 2001
+From: Kevin Thorne <kevint@aptitekk.com>
+Date: Wed, 30 Jul 2014 19:36:21 -0600
+Subject: [PATCH 082/101] Fixed exit tray menu button
+
+---
+ TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java | 5 +----
+ 1 file changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+index 43598c9..61791d5 100644
+--- a/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
++++ b/TeamScreen/src/com/aptitekk/TeamScreen/TeamScreenDaemon.java
+@@ -348,10 +348,7 @@ public class TeamScreenDaemon implements KeyListener, HotkeyListener, UpdaterLis
+ 		exitItem.addActionListener(new ActionListener() {
+ 			@Override
+ 			public void actionPerformed(ActionEvent e) {
+-				tray.remove(trayIcon);
+-				if(FolderManager.isWindows())
+-					JIntellitype.getInstance().cleanUp();
+-				System.exit(0);
++				exit();
+ 			}
+ 		});
+ 	}
+-- 
+2.39.5 (Apple Git-154)
+
